@@ -1,14 +1,32 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class HumanBrain : MonoBehaviour, IPlayerBrain
 {
     [Tooltip("Degrees of slack before the player rotates toward the pointer (prevents jitter).")]
     public float rotationDeadzone = 8f;
 
+    private Keyboard keyboard;
+    private Mouse mouse;
+
+    void OnEnable()
+    {
+        keyboard = Keyboard.current;
+        mouse = Mouse.current;
+    }
+
     public Vector2 GetMovement()
     {
-        float h = Input.GetAxisRaw("Horizontal");
-        float v = Input.GetAxisRaw("Vertical");
+        if (keyboard == null) return Vector2.zero;
+
+        float h = 0f;
+        float v = 0f;
+
+        if (keyboard.aKey.isPressed) h -= 1f;
+        if (keyboard.dKey.isPressed) h += 1f;
+        if (keyboard.sKey.isPressed) v -= 1f;
+        if (keyboard.wKey.isPressed) v += 1f;
+
         return new Vector2(h, v).normalized;
     }
 
@@ -26,8 +44,8 @@ public class HumanBrain : MonoBehaviour, IPlayerBrain
         return signedAngle > 0f ? -1f : 1f;
     }
 
-    public bool GetPushInput() => Input.GetButton("Fire1");
-    public bool GetBlockInput() => Input.GetButton("Fire2");
-    public bool GetDodgeInput() => Input.GetButtonDown("Jump");
-    public bool GetSpecialInput() => Input.GetButtonDown("Fire3");
+    public bool GetPushInput() => mouse != null && mouse.leftButton.isPressed;
+    public bool GetBlockInput() => mouse != null && mouse.rightButton.isPressed;
+    public bool GetDodgeInput() => keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+    public bool GetSpecialInput() => false;
 }
