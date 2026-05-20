@@ -6,14 +6,12 @@ public class PlayerMovingState : PlayerStateBase
 
     public override void UpdateState()
     {
-        Vector2 moveDirection = player.Brain.GetMovement();
-        player.ApplyForce(moveDirection * player.movementSpeed);
+        Vector2 move = player.Brain.GetMovement();
+        player.SetVelocity(move * player.stats.movementSpeed);
 
-        if (moveDirection != Vector2.zero)
-        {
-            float angle = Mathf.Atan2(moveDirection.y, moveDirection.x) * Mathf.Rad2Deg - 90f;
-            player.transform.rotation = Quaternion.Euler(0, 0, angle);
-        }
+        float rot = player.Brain.GetRotationInput();
+        if (rot != 0f)
+            player.transform.Rotate(0f, 0f, -rot * 360f * Time.deltaTime);
 
         if (player.Brain.GetPushInput()) player.SetState(Player.PlayerState.Charging);
         else if (player.Brain.GetBlockInput()) player.SetState(Player.PlayerState.Blocking);

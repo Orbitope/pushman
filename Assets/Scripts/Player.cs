@@ -1,29 +1,31 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.UI;
 
+[RequireComponent(typeof(Rigidbody2D))]
 public class Player : MonoBehaviour
 {
-    public float weight = 1f;
-    public float maxStamina = 100f;
-    public float staminaRegenRate = 10f;
-    public float blockStaminaUsageRate = 20f;
-    public float dodgeForce = 500f;
-    public float dodgeStamina = 20f;
-    public float dodgeTime = 0.5f;
-    public float pushForce = 300f;
-    public float pushStamina = 15f;
-    public float pushChargeMultiplier = 2f;
-    public float pushChargeTime = 1f;
-    public float movementSpeed = 200f;
-    public float specialStamina = 50f;
+    [Header("Configuration")]
+    public CharacterStats stats;
+
+    [Header("Combat")]
+    public LayerMask opponentLayer;
+    public float pushHitRadius = 0.6f;
+    public float pushHitOffset = 0.7f;
+
+    [Header("UI")]
+    public Slider staminaSlider;
+    private SpriteRenderer spriteRenderer;
+    private Color baseColor = Color.white;
 
     public enum PlayerState { Moving, Charging, Blocking, Pushing, Dodging, Stunned }
     public PlayerState currentState;
-    private PlayerStateBase currentStateScript; 
+    private PlayerStateBase currentStateScript;
     public IPlayerBrain Brain { get; private set; }
 
     private Rigidbody2D rb;
-    public Animator animator; 
+    public Rigidbody2D Body => rb;
+    public Animator animator;
     public float currentStamina;
 
     // State Scripts
@@ -34,14 +36,26 @@ public class Player : MonoBehaviour
     public PlayerDodgingState dodgingStateScript;
     public PlayerStunnedState stunnedStateScript;
 
+    private Coroutine stunRoutine;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
-        currentStamina = maxStamina;
+        spriteRenderer = GetComponent<SpriteRenderer>();
 
         Brain = GetComponent<IPlayerBrain>();
         if (Brain == null) Debug.LogError($"No IPlayerBrain found on {gameObject.name}!");
+
+        if (stats == null)
+        {
+            Debug.LogError($"No CharacterStats assigned on {gameObject.name}!");
+        }
+        else
+        {
+            rb.mass = stats.weight;
+            currentStamina = stats.maxStamina;
+        }
 
         movingStateScript = GetComponent<PlayerMovingState>();
         chargingStateScript = GetComponent<PlayerChargingState>();
@@ -49,103 +63,180 @@ public class Player : MonoBehaviour
         pushingStateScript = GetComponent<PlayerPushingState>();
         dodgingStateScript = GetComponent<PlayerDodgingState>();
         stunnedStateScript = GetComponent<PlayerStunnedState>();
+
+        if (spriteRenderer != null) baseColor = spriteRenderer.color;
     }
 
-    void Start()
-    {
-        SetState(PlayerState.Moving); 
-    }
+    void Start() => SetState(PlayerState.Moving);
 
     void Update()
     {
         currentStateScript?.UpdateState();
 
-        if (currentState == PlayerState.Moving || currentState == PlayerState.Pushing || currentState == PlayerState.Stunned)
+        if (stats != null &&
+            (currentState == PlayerState.Moving || currentState == PlayerState.Pushing || currentState == PlayerState.Stunned))
         {
-            currentStamina = Mathf.Min(maxStamina, currentStamina + staminaRegenRate * Time.deltaTime);
+            currentStamina = Mathf.Min(stats.maxStamina, currentStamina + stats.staminaRegenRate * Time.deltaTime);
         }
+
+        UpdateUI();
+        UpdateStateColor();
+    }
+
+    private void UpdateUI()
+    {
+        if (staminaSlider != null && stats != null)
+        {
+            staminaSlider.value = currentStamina / stats.maxStamina;
+        }
+    }
+
+    private void UpdateStateColor()
+    {
+        if (spriteRenderer == null) return;
+
+        Color targetColor = baseColor;
+
+        if (currentState == PlayerState.Stunned)
+            targetColor = Color.gray;
+        else if (currentState == PlayerState.Charging)
+            targetColor = Color.white;  // fully charged appears bright white
+        else if (currentStamina < stats.maxStamina * 0.2f)
+            targetColor = new Color(1f, 0.5f, 0.5f);  // low stamina → red tint
+        else
+            targetColor = baseColor;
+
+        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 5f);
     }
 
     public void SetState(PlayerState newState)
     {
-        currentStateScript?.EndState(); 
+        currentStateScript?.EndState();
         currentState = newState;
-
-        switch (newState)
+        currentStateScript = newState switch
         {
-            case PlayerState.Moving: currentStateScript = movingStateScript; break;
-            case PlayerState.Charging: currentStateScript = chargingStateScript; break;
-            case PlayerState.Blocking: currentStateScript = blockingStateScript; break;
-            case PlayerState.Pushing: currentStateScript = pushingStateScript; break;
-            case PlayerState.Dodging: currentStateScript = dodgingStateScript; break;
-            case PlayerState.Stunned: currentStateScript = stunnedStateScript; break;
+            PlayerState.Moving => movingStateScript,
+            PlayerState.Charging => chargingStateScript,
+            PlayerState.Blocking => blockingStateScript,
+            PlayerState.Pushing => pushingStateScript,
+            PlayerState.Dodging => dodgingStateScript,
+            PlayerState.Stunned => stunnedStateScript,
+            _ => currentStateScript
+        };
+        currentStateScript?.BeginState();
+    }
+
+    // --- Combat resolution ---
+
+    // Explicit overlap cast: works even when both players are already touching,
+    // which OnCollisionEnter2D would silently miss. Handles its own recovery stun.
+    public void ExecutePush(float chargeNormalized)
+    {
+        float strength = stats.pushForce + stats.pushForce * stats.pushChargeMultiplier * Mathf.Clamp01(chargeNormalized);
+        Vector2 origin = (Vector2)transform.position + (Vector2)transform.up * pushHitOffset;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(origin, pushHitRadius, opponentLayer);
+
+        RLAgentBrain myRL = Brain as RLAgentBrain;
+
+        foreach (var hitCol in hits)
+        {
+            Player other = hitCol.GetComponentInParent<Player>();
+            if (other == null || other == this) continue;
+
+            Vector2 pushDir = ((Vector2)(other.transform.position - transform.position)).normalized;
+            RLAgentBrain otherRL = other.Brain as RLAgentBrain;
+            bool blocked = other.currentState == PlayerState.Blocking && other.IsFacing(this);
+
+            if (blocked)
+            {
+                other.SetState(PlayerState.Moving); // break the block
+                otherRL?.AddSuccessfulBlockReward();
+                myRL?.AddPushBlockedReward();
+                Stun(0.5f);                          // pusher staggered
+                ApplyImpulse(-pushDir * strength);
+            }
+            else
+            {
+                other.Stun(0.5f);
+                other.ApplyImpulse(pushDir * strength);
+                otherRL?.AddTakeHitReward();
+                myRL?.AddLandPushReward();
+                Stun(0.2f);                          // recovery frames
+            }
+            return;
         }
 
-        currentStateScript?.BeginState(); 
+        Stun(0.2f); // whiff recovery
+    }
+
+    public bool IsFacing(Player other)
+    {
+        Vector2 toOther = ((Vector2)(other.transform.position - transform.position)).normalized;
+        return Vector2.Dot(transform.up, toOther) > 0.3f;
     }
 
     void OnCollisionEnter2D(Collision2D collision)
     {
         if (currentState == PlayerState.Dodging) HandleDodgeCollision(collision);
-        else if (currentState == PlayerState.Pushing) HandlePushCollision(collision);
     }
 
     private void HandleDodgeCollision(Collision2D collision)
     {
-        Player otherPlayer = collision.gameObject.GetComponent<Player>();
-        if (otherPlayer != null && otherPlayer != this) 
+        Player other = collision.gameObject.GetComponentInParent<Player>();
+        if (other == null || other == this)
         {
-            SetVelocity(Vector2.zero); 
-            SetState(PlayerState.Moving); 
+            SetVelocity(Vector2.zero);
+            SetState(PlayerState.Moving);
+            return;
+        }
 
-            Vector2 hitDirection = (collision.transform.position - transform.position).normalized;
-            otherPlayer.ApplyForce(hitDirection * dodgeForce);
-            otherPlayer.Stun(0.5f); 
+        if (other.currentState == PlayerState.Dodging)
+        {
+            // Mutual dodge: both fire this callback, so resolve exactly once.
+            if (GetInstanceID() < other.GetInstanceID())
+            {
+                Vector2 dir = ((Vector2)(transform.position - other.transform.position)).normalized;
+                Stun(0.5f);
+                other.Stun(0.5f);
+                ApplyImpulse(dir * stats.dodgeForce);
+                other.ApplyImpulse(-dir * other.stats.dodgeForce);
+            }
         }
         else
         {
-            SetVelocity(Vector2.zero); 
-            SetState(PlayerState.Moving); 
+            Vector2 hitDir = ((Vector2)(other.transform.position - transform.position)).normalized;
+            SetVelocity(Vector2.zero);
+            SetState(PlayerState.Moving);
+            other.Stun(0.5f);
+            other.ApplyImpulse(hitDir * stats.dodgeForce);
         }
     }
 
-    private void HandlePushCollision(Collision2D collision)
-    {
-        Player otherPlayer = collision.gameObject.GetComponent<Player>();
-        if (otherPlayer != null && otherPlayer != this)
-        {
-            Vector2 pushDirection = (collision.transform.position - transform.position).normalized;
-            float pushStrength = pushForce + (pushForce * pushChargeMultiplier * (pushingStateScript.chargeTime / pushChargeTime));
+    // --- Helpers ---
 
-            RLAgentBrain myRLBrain = Brain as RLAgentBrain;
-            RLAgentBrain opponentRLBrain = otherPlayer.Brain as RLAgentBrain;
-
-            if (collision.otherCollider.CompareTag("Block"))
-            {
-                ApplyForce(-pushDirection * pushStrength); 
-                if (myRLBrain != null) myRLBrain.AddPushBlockedReward();           
-                if (opponentRLBrain != null) opponentRLBrain.AddSuccessfulBlockReward(); 
-            }
-            else
-            {
-                otherPlayer.ApplyForce(pushDirection * pushStrength); 
-                otherPlayer.Stun(0.5f); 
-                if (myRLBrain != null) myRLBrain.AddLandPushReward();      
-                if (opponentRLBrain != null) opponentRLBrain.AddTakeHitReward(); 
-            }
-        }
-    }
-
-    public void ApplyForce(Vector2 force) => rb.AddForce(force);
+    public void ApplyImpulse(Vector2 force) => rb.AddForce(force, ForceMode2D.Impulse);
     public void SetVelocity(Vector2 velocity) => rb.linearVelocity = velocity;
     public bool CanUseStamina(float amount) => currentStamina >= amount;
-    public void UseStamina(float amount) => currentStamina -= amount;
-    public void Stun(float duration) => StartCoroutine(StunCoroutine(duration));
+    public void UseStamina(float amount) => currentStamina = Mathf.Max(0f, currentStamina - amount);
+
+    public void Stun(float duration)
+    {
+        if (stunRoutine != null) StopCoroutine(stunRoutine);
+        stunRoutine = StartCoroutine(StunCoroutine(duration));
+    }
 
     private IEnumerator StunCoroutine(float duration)
     {
         SetState(PlayerState.Stunned);
         yield return new WaitForSeconds(duration);
-        SetState(PlayerState.Moving); 
+        stunRoutine = null;
+        SetState(PlayerState.Moving);
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.cyan;
+        Vector2 origin = (Vector2)transform.position + (Vector2)transform.up * pushHitOffset;
+        Gizmos.DrawWireSphere(origin, pushHitRadius);
     }
 }
