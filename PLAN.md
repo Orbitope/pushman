@@ -16,6 +16,20 @@
 ### ⭐ FULL IMPLEMENTATION COMPLETE ⭐
 All code, editor tooling, prefabs, scenes, and visual feedback are complete. Ready for testing and ML-Agents training.
 
+### Post-Implementation Fixes (2026-05-19)
+- ✅ **Input System Compatibility** — Updated HumanBrain to use new Input System package (1.19.0)
+  - WASD for movement (direct key polling)
+  - Left/right mouse for push/block, spacebar for dodge
+  - Resolved: "InvalidOperationException: You are trying to read Input using UnityEngine.Input class"
+- ✅ **Observation Space Mismatch** — Fixed BehaviorParameters configuration
+  - Observation size corrected to 13 (was 1, causing truncation warning)
+  - Re-ran PushmanSetup to rebuild scene and prefabs
+  - Resolved: "More observations (13) made than vector observation size (1)"
+- ✅ **Test Bot Brains** — Added 3 simple IPlayerBrain implementations for manual testing
+  - `StandingBotBrain` — stationary, pushes every 2s
+  - `ChaseBotBrain` — walks slowly, random push/block
+  - `DodgingBotBrain` — dodges toward player every 5s
+
 ---
 
 ### Phase 1 — Logic & State Machine Fixes: ✅ COMPLETE
