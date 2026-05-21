@@ -14,27 +14,35 @@ public class DodgingBotBrain : MonoBehaviour, IPlayerBrain
     private bool    wantDodge;
     private Vector2 cachedMove;
     private Player  cachedSelf;
+    private Player  cachedTarget;
 
     void Awake() => cachedSelf = GetComponent<Player>();
     void Start()  => nextDodgeTime = Time.time + dodgeInterval;
+
+    private Player FindTarget()
+    {
+        if (cachedTarget != null && cachedTarget.isActiveAndEnabled) return cachedTarget;
+        cachedTarget = null;
+        float bestDist = float.MaxValue;
+        foreach (var p in FindObjectsByType<Player>(FindObjectsSortMode.None))
+        {
+            if (p == cachedSelf || !p.isActiveAndEnabled) continue;
+            float d = Vector2.Distance(p.transform.position, transform.position);
+            if (d < bestDist) { bestDist = d; cachedTarget = p; }
+        }
+        return cachedTarget;
+    }
 
     void Update()
     {
         cachedRotation = 0f;
         cachedMove     = Vector2.zero;
-        wantDodge      = false;
+        // wantDodge is NOT reset here — it persists until GetDodgeInput() consumes it,
+        // so execution order between this Update and Player.Update doesn't matter.
 
         if (cachedSelf == null) return;
 
-        // Find nearest other player.
-        Player target   = null;
-        float  bestDist = float.MaxValue;
-        foreach (var p in FindObjectsByType<Player>(FindObjectsSortMode.None))
-        {
-            if (p == cachedSelf || !p.isActiveAndEnabled) continue;
-            float d = Vector2.Distance(p.transform.position, transform.position);
-            if (d < bestDist) { bestDist = d; target = p; }
-        }
+        Player target = FindTarget();
         if (target == null) return;
 
         Vector2 toTarget = ((Vector2)(target.transform.position - transform.position)).normalized;
@@ -57,6 +65,6 @@ public class DodgingBotBrain : MonoBehaviour, IPlayerBrain
     public float   GetRotationInput() => cachedRotation;
     public bool    GetPushInput()     => false;
     public bool    GetBlockInput()    => false;
-    public bool    GetDodgeInput()    => wantDodge;
+    public bool    GetDodgeInput()    { bool v = wantDodge; wantDodge = false; return v; }
     public bool    GetSpecialInput()  => false;
 }

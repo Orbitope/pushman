@@ -396,6 +396,10 @@ public static class PushmanSetup
         Image p2Fill = CreateBarUI(hudGO.transform, isLeft: false,
                                    new Color(0.85f, 0.2f, 0.2f));   // red
 
+        // Score labels — top corners, matching player colors.
+        Text p1Score = CreateScoreText(hudGO.transform, isLeft: true,  new Color(0.2f, 0.85f, 0.2f));
+        Text p2Score = CreateScoreText(hudGO.transform, isLeft: false, new Color(0.85f, 0.2f, 0.2f));
+
         // Wire StaminaHUD via reflection — avoids a hard compile-time editor→runtime dependency.
         // StaminaHUD.Start() also auto-discovers players by name as a fallback.
         System.Type hudType = null;
@@ -413,8 +417,10 @@ public static class PushmanSetup
                 so.FindProperty("player1").objectReferenceValue = p1GO.GetComponent<Player>();
             if (p2GO != null)
                 so.FindProperty("player2").objectReferenceValue = p2GO.GetComponent<Player>();
-            so.FindProperty("p1Fill").objectReferenceValue  = p1Fill;
-            so.FindProperty("p2Fill").objectReferenceValue  = p2Fill;
+            so.FindProperty("p1Fill").objectReferenceValue      = p1Fill;
+            so.FindProperty("p2Fill").objectReferenceValue      = p2Fill;
+            so.FindProperty("p1ScoreText").objectReferenceValue = p1Score;
+            so.FindProperty("p2ScoreText").objectReferenceValue = p2Score;
             so.ApplyModifiedProperties();
         }
         else
@@ -482,6 +488,43 @@ public static class PushmanSetup
         fillImg.fillAmount = 1f;
 
         return fillImg;
+    }
+
+    // Score label anchored to a top corner. Uses legacy Text (no TMP dependency).
+    private static Text CreateScoreText(Transform hudParent, bool isLeft, Color color)
+    {
+        const float MARGIN  = 20f;
+        const float SIZE    = 80f;
+
+        var go = new GameObject(isLeft ? "P1Score" : "P2Score");
+        go.transform.SetParent(hudParent, false);
+        var rt = go.AddComponent<RectTransform>();
+
+        if (isLeft)
+        {
+            rt.anchorMin        = new Vector2(0f, 1f);
+            rt.anchorMax        = new Vector2(0f, 1f);
+            rt.pivot            = new Vector2(0f, 1f);
+            rt.anchoredPosition = new Vector2(MARGIN, -MARGIN);
+        }
+        else
+        {
+            rt.anchorMin        = new Vector2(1f, 1f);
+            rt.anchorMax        = new Vector2(1f, 1f);
+            rt.pivot            = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(-MARGIN, -MARGIN);
+        }
+        rt.sizeDelta = new Vector2(SIZE, SIZE);
+
+        var txt = go.AddComponent<Text>();
+        txt.text      = "0";
+        txt.fontSize  = 52;
+        txt.fontStyle = FontStyle.Bold;
+        txt.color     = color;
+        txt.alignment = isLeft ? TextAnchor.UpperLeft : TextAnchor.UpperRight;
+        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        return txt;
     }
 
     // -----------------------------------------------------------------------
@@ -755,8 +798,12 @@ public static class PushmanSetup
         bp.BehaviorName = "PushmanAgent";
         bp.BehaviorType = BehaviorType.HeuristicOnly;
 
-        // Use direct API — avoids fragile SerializedObject property-path lookups.
-        bp.BrainParameters.VectorObservationSize        = OBS_SIZE;
+        // Derive space size from the ObservationProfile asset so it stays in sync
+        // if anyone toggles profile flags — avoids hard ML-Agents runtime errors.
+        var profile = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+        int obsSize = profile != null ? profile.ComputeSpaceSize(1) : OBS_SIZE;
+        bp.BrainParameters.VectorObservationSize = obsSize;
         bp.BrainParameters.NumStackedVectorObservations = 1;
         // 4 discrete branches: move-H(3), move-V(3), rotate(3), action(4=none/push/block/dodge)
         bp.BrainParameters.ActionSpec = ActionSpec.MakeDiscrete(3, 3, 3, 4);

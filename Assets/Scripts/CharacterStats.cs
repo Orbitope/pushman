@@ -9,17 +9,17 @@ public class CharacterStats : ScriptableObject
 
     [Header("Stamina")]
     public float maxStamina = 100f;
-    public float staminaRegenRate = 10f;
-    public float blockStaminaUsageRate = 20f;
+    public float staminaRegenRate = 8f;
+    public float blockStaminaUsageRate = 15f;
 
     [Header("Dodge")]
-    public float dodgeForce = 12f;
-    public float dodgeStamina = 20f;
-    public float dodgeTime = 0.3f;
+    public float dodgeForce = 18f;
+    public float dodgeStamina = 40f;
+    public float dodgeTime = 0.25f;
 
     [Header("Push")]
     public float pushForce = 8f;
-    public float pushStamina = 15f;
-    public float pushChargeMultiplier = 2f;
+    public float pushStamina = 20f;
+    public float pushChargeMultiplier = 1.5f;
     public float pushChargeTime = 1f;
 }

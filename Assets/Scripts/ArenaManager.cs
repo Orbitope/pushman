@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class ArenaManager : MonoBehaviour
@@ -20,12 +21,27 @@ public class ArenaManager : MonoBehaviour
     [Header("Spawn Points")]
     public List<Transform> spawnPoints;
 
+    [Header("Round Feedback")]
+    [Tooltip("Seconds to freeze on a ring-out before resetting.")]
+    public float ringOutPauseDuration = 0.6f;
+
     private List<Player> activePlayers = new List<Player>();
     private float currentRingRadius;
     private float shrinkTimer;
     private bool matchRunning;
 
+    // Boundary ring visual — updated each frame to match currentRingRadius.
+    private SpriteRenderer boundaryRenderer;
+    private float          boundaryNativeRadius; // world radius when scale = (1,1,1)
+
+    // Score tracking — indexed by position in allPlayers list.
+    private int[] scores;
+
     public float CurrentRingRadius => currentRingRadius;
+
+    // Read by StaminaHUD or any score display.
+    public int GetScore(int playerIndex) =>
+        scores != null && playerIndex < scores.Length ? scores[playerIndex] : 0;
 
     void Start()
     {
@@ -34,6 +50,19 @@ public class ArenaManager : MonoBehaviour
             Debug.LogError("[ArenaManager] No players assigned.");
             return;
         }
+
+        scores = new int[allPlayers.Count];
+
+        // Cache the ArenaBoundary child so we can resize it as the ring shrinks.
+        var boundaryGO = transform.Find("ArenaBoundary");
+        if (boundaryGO != null)
+        {
+            boundaryRenderer = boundaryGO.GetComponent<SpriteRenderer>();
+            // The boundary was scaled so its world diameter = ringOutRadius * 2.
+            // Store the initial scale-to-radius ratio.
+            boundaryNativeRadius = ringOutRadius;
+        }
+
         StartMatch();
     }
 
@@ -50,11 +79,23 @@ public class ArenaManager : MonoBehaviour
     {
         if (!matchRunning) return;
 
+        // Shrink ring over time.
         shrinkTimer += Time.fixedDeltaTime;
         if (shrinkTimer > timeUntilShrink)
             currentRingRadius = Mathf.Max(minRingRadius, currentRingRadius - shrinkRate * Time.fixedDeltaTime);
 
+        // Keep boundary sprite in sync with currentRingRadius.
+        UpdateBoundaryScale();
+
         CheckRingOuts();
+    }
+
+    // Scale the ArenaBoundary SpriteRenderer to always match currentRingRadius.
+    private void UpdateBoundaryScale()
+    {
+        if (boundaryRenderer == null || boundaryNativeRadius <= 0f) return;
+        float s = currentRingRadius / boundaryNativeRadius;
+        boundaryRenderer.transform.localScale = new Vector3(s, s, 1f);
     }
 
     private void CheckRingOuts()
@@ -72,6 +113,16 @@ public class ArenaManager : MonoBehaviour
 
         if (ringOuts == null) return;
 
+        // Award point to surviving player(s) before anything else.
+        foreach (var p in allPlayers)
+        {
+            if (!ringOuts.Contains(p) && activePlayers.Contains(p))
+            {
+                int idx = allPlayers.IndexOf(p);
+                if (idx >= 0) scores[idx]++;
+            }
+        }
+
         foreach (var p in ringOuts)
         {
             (p.Brain as RLAgentBrain)?.RegisterLoss();
@@ -84,15 +135,36 @@ public class ArenaManager : MonoBehaviour
             if (activePlayers.Count == 1)
                 (activePlayers[0].Brain as RLAgentBrain)?.RegisterWin();
 
-            EndAllEpisodes();
-            StartMatch();
+            StartCoroutine(RingOutSequence());
         }
+    }
+
+    // Brief pause + boundary flash before resetting — gives players a moment to register what happened.
+    private IEnumerator RingOutSequence()
+    {
+        matchRunning = false;
+
+        // Flash boundary ring white.
+        if (boundaryRenderer != null)
+        {
+            Color originalColor = boundaryRenderer.color;
+            boundaryRenderer.color = Color.white;
+            yield return new WaitForSecondsRealtime(ringOutPauseDuration * 0.5f);
+            boundaryRenderer.color = originalColor;
+            yield return new WaitForSecondsRealtime(ringOutPauseDuration * 0.5f);
+        }
+        else
+        {
+            yield return new WaitForSecondsRealtime(ringOutPauseDuration);
+        }
+
+        EndAllEpisodes();
+        StartMatch();
     }
 
     // Applies all rewards first, then EndEpisode on every agent — ArenaManager owns episode flow.
     private void EndAllEpisodes()
     {
-        matchRunning = false;
         foreach (var p in allPlayers)
         {
             if (p != null && p.Brain is RLAgentBrain rl)
@@ -109,7 +181,6 @@ public class ArenaManager : MonoBehaviour
             if (p == null) continue;
             p.gameObject.SetActive(true);
 
-            // Pick a unique random spawn; recycle if there are more players than spawn points.
             if (available.Count == 0) available = new List<Transform>(spawnPoints);
             int idx = Random.Range(0, available.Count);
             Transform spawn = available[idx];

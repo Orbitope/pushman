@@ -14,9 +14,24 @@ public class StandingBotBrain : MonoBehaviour, IPlayerBrain
     private float   cachedRotation;
     private bool    wantPush;
     private Player  cachedSelf;
+    private Player  cachedTarget;
 
     void Awake() => cachedSelf = GetComponent<Player>();
     void Start()  => nextPushTime = Time.time + pushInterval;
+
+    private Player FindTarget()
+    {
+        if (cachedTarget != null && cachedTarget.isActiveAndEnabled) return cachedTarget;
+        cachedTarget = null;
+        float bestDist = float.MaxValue;
+        foreach (var p in FindObjectsByType<Player>(FindObjectsSortMode.None))
+        {
+            if (p == cachedSelf || !p.isActiveAndEnabled) continue;
+            float d = Vector2.Distance(p.transform.position, transform.position);
+            if (d < bestDist) { bestDist = d; cachedTarget = p; }
+        }
+        return cachedTarget;
+    }
 
     void Update()
     {
@@ -25,15 +40,7 @@ public class StandingBotBrain : MonoBehaviour, IPlayerBrain
 
         if (cachedSelf == null) return;
 
-        // Find nearest other player.
-        Player target   = null;
-        float  bestDist = float.MaxValue;
-        foreach (var p in FindObjectsByType<Player>(FindObjectsSortMode.None))
-        {
-            if (p == cachedSelf || !p.isActiveAndEnabled) continue;
-            float d = Vector2.Distance(p.transform.position, transform.position);
-            if (d < bestDist) { bestDist = d; target = p; }
-        }
+        Player target = FindTarget();
         if (target == null) return;
 
         Vector2 toTarget = ((Vector2)(target.transform.position - transform.position)).normalized;
