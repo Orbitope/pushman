@@ -283,13 +283,17 @@ public static class PushmanSetup
             ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite,
                                new Color(0.8f, 0.2f, 0.2f));  // red
 
+        // --- Stamina bars ---
+        if (p1GO != null) AddStaminaBarToPlayer(p1GO);
+        if (p2GO != null) AddStaminaBarToPlayer(p2GO);
+
         // --- Arena boundary ring ---
         GameObject arenaGO = GameObject.Find("Arena");
         if (arenaGO != null)
             ApplyArenaBoundary(arenaGO, ringSprite, ringOutRadius: 10f);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        Debug.Log("[PushmanSetup] Sprites applied. Green=P1, Red=P2. Arena boundary ring added.");
+        Debug.Log("[PushmanSetup] Sprites + stamina bars applied. Green=P1, Red=P2.");
     }
 
     // Assign body circle, create hand children, wire PlayerVisuals.
@@ -354,6 +358,75 @@ public static class PushmanSetup
         sr.sortingOrder = -1;  // behind players
 
         EditorUtility.SetDirty(go);
+    }
+
+    // World-space stamina bar above the player. Recreated on every run so it's idempotent.
+    private static void AddStaminaBarToPlayer(GameObject playerGO)
+    {
+        DestroyChild(playerGO, "StaminaCanvas");
+
+        // Canvas
+        var canvasGO = new GameObject("StaminaCanvas");
+        canvasGO.transform.SetParent(playerGO.transform);
+        canvasGO.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+        canvasGO.transform.localScale    = Vector3.one * 0.01f;
+
+        var canvas = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        var crt = canvasGO.GetComponent<RectTransform>();
+        crt.sizeDelta = new Vector2(80f, 10f);   // 80×10 px → 0.80×0.10 world units at scale 0.01
+
+        // Background
+        var bgGO  = new GameObject("Background");
+        bgGO.transform.SetParent(canvasGO.transform);
+        bgGO.transform.localPosition = Vector3.zero;
+        var bgRect = bgGO.AddComponent<RectTransform>();
+        bgRect.anchorMin = Vector2.zero;
+        bgRect.anchorMax = Vector2.one;
+        bgRect.offsetMin = Vector2.zero;
+        bgRect.offsetMax = Vector2.zero;
+        bgGO.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.85f);
+
+        // Fill area + fill image (Slider needs a fill rect)
+        var fillGO  = new GameObject("Fill");
+        fillGO.transform.SetParent(canvasGO.transform);
+        fillGO.transform.localPosition = Vector3.zero;
+        var fillRect = fillGO.AddComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
+        fillGO.AddComponent<Image>().color = new Color(0.2f, 0.85f, 0.2f, 0.9f);
+
+        // Slider
+        var sliderGO  = new GameObject("StaminaSlider");
+        sliderGO.transform.SetParent(canvasGO.transform);
+        sliderGO.transform.localPosition = Vector3.zero;
+        var sliderRect = sliderGO.AddComponent<RectTransform>();
+        sliderRect.anchorMin = Vector2.zero;
+        sliderRect.anchorMax = Vector2.one;
+        sliderRect.offsetMin = Vector2.zero;
+        sliderRect.offsetMax = Vector2.zero;
+
+        var slider         = sliderGO.AddComponent<Slider>();
+        slider.minValue    = 0f;
+        slider.maxValue    = 1f;
+        slider.value       = 1f;
+        slider.interactable = false;
+        slider.direction   = Slider.Direction.LeftToRight;
+        slider.fillRect    = fillRect;
+
+        // Wire to Player.staminaSlider
+        var player = playerGO.GetComponent<Player>();
+        if (player != null)
+        {
+            var so = new SerializedObject(player);
+            so.FindProperty("staminaSlider").objectReferenceValue = slider;
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(player);
+        }
+
+        EditorUtility.SetDirty(canvasGO);
     }
 
     // -----------------------------------------------------------------------

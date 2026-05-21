@@ -18,6 +18,7 @@ MonoBehaviour:
   takePushHit: -0.1
   successfulBlock: 0.05
   pushBlocked: -0.05
-  centerControlMultiplier: 0.001
   facingOpponentMultiplier: 0.001
   wastedStaminaMultiplier: -0.05
+  opponentEdgePressureMultiplier: 0.0002
+  timePenaltyPerStep: -0.0002

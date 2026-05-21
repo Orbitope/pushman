@@ -21,7 +21,7 @@ GameObject:
   - component: {fileID: 3800101689477111105}
   - component: {fileID: 1994694345118920530}
   - component: {fileID: 1532497098953248001}
-  - component: {fileID: 2104009712006491364}
+  - component: {fileID: 7082842042428037543}
   m_Layer: 8
   m_Name: Player_RL
   m_TagString: Untagged
@@ -323,7 +323,7 @@ MonoBehaviour:
   - {fileID: 0}
   personality: {fileID: 11400000, guid: 842fc2289d1664d8e9a3b9c91a9ac1be, type: 2}
   observationProfile: {fileID: 11400000, guid: 2d1accdb912f14687b7da566cae10e31, type: 2}
---- !u!114 &2104009712006491364
+--- !u!114 &7082842042428037543
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -332,12 +332,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 4274560868619013347}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a5c9d521e5ef4759a8246a07d52221e, type: 3}
+  m_Script: {fileID: 11500000, guid: 1134da131481a4374a22ae0e9a8f046c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.DecisionRequester
-  DecisionPeriod: 5
-  DecisionStep: 0
-  TakeActionsBetweenDecisions: 1
+  m_EditorClassIdentifier: Assembly-CSharp::ChaseBotBrain
+  walkSpeed: 0.5
+  pushRange: 1.5
+  chaseRange: 25
+  aimDotThreshold: 0.8
+  rotationDeadzone: 5
+  pushChance: 0.3
+  blockChance: 0.2
 --- !u!1 &4735768789270709554
 GameObject:
   m_ObjectHideFlags: 0
