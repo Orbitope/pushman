@@ -1,13 +1,13 @@
 # Pushman — Master Plan
 
 ## 0. Implementation Status (source of truth — update this first)
-*Updated: 2026-05-20*
+*Updated: 2026-05-21*
 
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
 
-### RL Training: ✅ Code complete, not yet trained
-All ML-Agents infrastructure is wired. Training configs exist. No runs have been executed yet.
+### RL Training: ✅ Code complete, assets ready, not yet trained
+All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject assets created. No runs have been executed yet.
 
 ---
 
@@ -19,14 +19,19 @@ All ML-Agents infrastructure is wired. Training configs exist. No runs have been
 - ✅ `CharacterStats` ScriptableObject — all stats decoupled from `Player.cs`; `DefaultStats.asset` is the tuned reference
 - ✅ `ArenaManager` — ring-out detection, shrinking stage, randomized respawn, round scoring, ring flash on ring-out
 - ✅ `RLAgentBrain` — Discrete/Continuous action space toggle, `ObservationProfile` SO, `BotPersonality` reward hooks
-- ✅ Training configs — `ppo_discrete_baseline.yaml`, `ppo_selfplay.yaml`, `sac_continuous.yaml`
+- ✅ Training configs — `ppo_discrete_baseline.yaml`, `ppo_selfplay.yaml`, `sac_continuous.yaml`, `ppo_fast_experiment.yaml`
 - ✅ Training scene — 8×8 = 64 arenas, 25u spacing (ring radius 10u, players ring out before reaching neighbours)
+- ✅ BotPersonality SOs — `Aggressive`, `Defensive`, `Balanced`, `Rusher`
+- ✅ CharacterStats SOs — `DefaultStats`, `Heavyweight`, `Speedster`
+- ✅ ObservationProfile SOs — `Profile_A` (full), `Profile_B` (FOV 90°), `Profile_C` (FOV + noise stubs)
+- ✅ `Assets/MLModels/` folder — target for trained ONNX files; naming: `[Personality]_[Stats]/PushmanAgent.onnx`
 
 **Editor tooling (`PushmanSetup.cs`)**
 - ✅ `Pushman/1b` — Human vs ChaseBotBrain test scene from scratch
 - ✅ `Pushman/4` — sprites + screen-space HUD (idempotent, safe to re-run)
 - ✅ `Pushman/2` — saves Arena + Player_RL prefabs
 - ✅ `Pushman/3` — builds ML_Training_Scene
+- ✅ `Pushman/5` — Bot vs Bot scene (both players InferenceOnly, auto-picks newest ONNX from Assets/MLModels/)
 
 **Visuals & HUD**
 - ✅ Screen-space stamina bars — P1 green bottom-left, P2 red bottom-right; `Image.Type.Filled` with sprite so `fillAmount` actually works
@@ -68,19 +73,43 @@ All ML-Agents infrastructure is wired. Training configs exist. No runs have been
 ### Pending
 
 **Visual polish**
-- ❌ Stamina bar lerp — snap is abrupt; lerp `fillAmount` toward target each frame. Optional: ghost bar that lags behind to show stamina loss cost.
-- ❌ Remove body red-tint stamina indicator — redundant now that HUD bars exist; `UpdateStateColor()` should only reflect state, not stamina level.
+- ✅ Stamina bar lerp — `fillAmount` lerps at 8×/s toward target (smooth drain visible)
+- ✅ Remove body red-tint stamina indicator — removed from `UpdateStateColor()`; state tints only (stunned=gray, dodging=blue, charging=white glow)
 
 **Gameplay / feel (validate during testing)**
 - ❓ Push-on-release feel — correct fighting-game design but unintuitive; watch for confusion during testing.
 - ❓ Stamina costs — dodge 40%, push 20–40% — validate these feel fair in play.
 - ❓ Shrink timer (30s) — may be too long for short test sessions; lower to ~10s to test the mechanic.
 
-**ML-Agents training (not started)**
-- ❌ First training run — `ppo_discrete_baseline.yaml` against `ChaseBotBrain` opponent
-- ❌ Self-play run — once baseline is trained
-- ❌ Profile B/C observations — FOV restriction and noise/delay (stubs exist in `ObservationProfile`)
-- ❌ ONNX model integration — load trained model into `Inference Only` mode for offline play
+**ML-Agents training (pre-training done, ready to run)**
+- ✅ Arena prefab fixed — `BehaviorType=Default`, `DecisionRequester` period=5
+- ✅ Training scenes — `ML_Training_Scene_Small` (4×4=16 arenas) + `ML_Training_Scene` (8×8=64)
+- ✅ `venv-mlagents/` ready — Python 3.10.12, mlagents 1.1.0, torch 2.3.1, onnx 1.15.0, setuptools<81
+- ✅ `train.sh` — convenience script for editor and standalone modes
+- ✅ `.gitignore` — `results/` and `builds/` excluded
+- ✅ Standalone build — `builds/Pushman_Training/` (Server Build via Unity 6 Build Profiles → macOS Server); two fixes required (see Standalone Build Notes below)
+- 🔄 Fast sanity run — `Pushman_Fast_v1` running standalone; previously reached 80k steps editor-mode. Resume/restart with `./train.sh --standalone --force`
+- ❌ First full training run — `ppo_discrete_baseline.yaml` (~2-3h, run via `./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_v1`)
+- ❌ Self-play run — after baseline trained; `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1`
+- ✅ ONNX integration — `results/Pushman_Fast_v1/PushmanAgent.onnx` copied to `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`; `Pushman/5` builds a watch scene automatically
+
+**Standalone Build Notes (apply after every rebuild)**
+Two patches are required after building — they survive until the next rebuild:
+
+1. **mlagents-envs macOS path patch** — already applied to `venv-mlagents/lib/.../mlagents_envs/env_utils.py`. Adds a raw-executable fallback for macOS so mlagents can find the Server Build folder layout (which produces `Pushman_Training/Pushman`, not a `.app` bundle). Re-apply if you recreate the venv.
+
+2. **gRPC native library symlink** — run once after each build:
+   ```bash
+   mkdir -p builds/Pushman_Training/Data/Plugins
+   ln -sf "$(pwd)/builds/Pushman_Training/PlugIns/libgrpc_csharp_ext.x64.bundle" \
+          builds/Pushman_Training/Data/Plugins/libgrpc_csharp_ext.x64.bundle
+   ```
+   Root cause: Unity Server Build places `libgrpc_csharp_ext.x64.bundle` in `PlugIns/` but the gRPC C# runtime searches `Data/Plugins/`. Without this symlink Unity falls back to inference mode silently and mlagents times out after 600 s.
+
+**Training notes**
+- Stamina costs must be locked before training — changing cost ratios (not maxStamina) invalidates learned policy
+- Model naming: `Assets/MLModels/[Personality]_[Stats]/PushmanAgent.onnx`
+- Test in test scene: swap Player2 brain to RLAgentBrain, set Inference Only, assign ONNX + BotPersonality + ObservationProfile
 
 ---
 
@@ -110,32 +139,73 @@ All ML-Agents infrastructure is wired. Training configs exist. No runs have been
 
 ## 3. Training Pipeline
 
-### Setup
+### Setup — ✅ venv installed (Python 3.10.12)
+`venv-mlagents/` is ready at the project root. Activate and go:
 ```bash
-python3 -m venv venv-mlagents
 source venv-mlagents/bin/activate
-pip install mlagents torch
 ```
+Installed: mlagents 1.1.0 · torch 2.12.0 · onnx 1.15.0
 
-### Run training
+**To recreate from scratch** (grpcio needs binary pre-install on macOS ARM):
 ```bash
-# Baseline PPO (start here)
-mlagents-learn TrainingConfigs/ppo_discrete_baseline.yaml --run-id=Pushman_v1
-
-# Self-play (after baseline)
-mlagents-learn TrainingConfigs/ppo_selfplay.yaml --run-id=Pushman_SelfPlay_v1
+pyenv install 3.10.12   # already installed
+PYENV_VERSION=3.10.12 python3 -m venv venv-mlagents
+source venv-mlagents/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install --only-binary=grpcio grpcio
+pip install "h5py" "Pillow" "pyyaml" "torch>=2.1.1" "tensorboard>=2.14" \
+            "six" "attrs" "huggingface-hub" "onnx==1.15.0" "cattrs>=1.1.0,<1.7" \
+            "numpy>=1.23.5,<1.24.0" "protobuf>=3.6,<3.21"
+pip install "mlagents==1.1.0" --no-deps
+pip install "mlagents-envs==1.1.0"
+pip install "setuptools<81"   # setuptools 81+ breaks StrictVersion used by mlagents_envs
+# IMPORTANT: do NOT install onnxscript — it forces protobuf 4+ which breaks mlagents pb2 files
+# torch 2.3.1 is the pinned version; torch 2.5+ requires onnxscript for ONNX export
 ```
 
-Then press **Play** in Unity on `ML_Training_Scene.unity`. Unity connects to Python on port 5004.
+### Training scenes
+| Scene | Arenas | Agents | Use for |
+|---|---|---|---|
+| `ML_Training_Scene_Small.unity` | 4×4 = 16 | 32 | Fast experiments, editor mode |
+| `ML_Training_Scene.unity` | 8×8 = 64 | 128 | Full production runs (standalone build only) |
+
+Rebuild scenes after code changes: `Pushman/3b` (small) or `Pushman/3` (full).
+
+### Mode A — Editor (current, fast experiments only)
+```bash
+source venv-mlagents/bin/activate
+# then press Play in Unity on ML_Training_Scene_Small AFTER "Listening on port 5004"
+mlagents-learn TrainingConfigs/ppo_fast_experiment.yaml --run-id=Pushman_Fast_v1 --force --timeout-wait=300
+
+# Resume after a timeout:
+mlagents-learn TrainingConfigs/ppo_fast_experiment.yaml --run-id=Pushman_Fast_v1 --resume --timeout-wait=300
+```
+Or use the script: `./train.sh` / `./train.sh --resume`
+
+### Mode B — Standalone build (full training runs, no Editor needed)
+**Build once in Unity:**
+1. `File → Build Settings`
+2. Add `ML_Training_Scene_Small` or `ML_Training_Scene` to scenes list, check it
+3. Check **Server Build** (headless — no rendering, 3–5× faster)
+4. Platform: Mac → **Build** → save as `builds/Pushman_Training`
+
+**Train (no Unity open):**
+```bash
+./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_v1
+```
+Python launches the binary, trains to completion, saves ONNX — fully hands-off.
+
+**Rebuild binary when:** any `.cs` gameplay file changes, or ScriptableObject asset values change.
+**Don't need to rebuild when:** only YAML configs or `Assets/MLModels/` change.
 
 ### Monitor
 ```bash
-tensorboard --logdir results/
+source venv-mlagents/bin/activate && tensorboard --logdir results/
 # open http://localhost:6006
 ```
 
-### Before training — checklist
-1. Run `Pushman/3` to rebuild the training scene with latest code
-2. Set Player_RL prefab `Behavior Parameters > Behavior Type` to `Default`
-3. Confirm `VectorObservationSize` matches `Profile_A.ComputeSpaceSize(1)` (currently 13)
-4. Confirm `DecisionRequester.DecisionPeriod = 5`
+### Checklist (already done — for reference)
+- ✅ Arena prefab: `BehaviorType = Default`, `DecisionRequester` period=5
+- ✅ `VectorObservationSize = 13` (Profile_A, 1 opponent)
+- ✅ Incremental GC enabled in Project Settings
+- ✅ `results/` and `builds/` in .gitignore

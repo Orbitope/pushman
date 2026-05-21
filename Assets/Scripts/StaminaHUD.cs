@@ -65,7 +65,9 @@ public class StaminaHUD : MonoBehaviour
         if (fill == null || player == null || player.stats == null) return;
 
         float ratio = Mathf.Clamp01(player.currentStamina / player.stats.maxStamina);
-        fill.fillAmount = ratio;
+
+        // Smooth lerp toward target — snappy enough to feel responsive, slow enough to read.
+        fill.fillAmount = Mathf.Lerp(fill.fillAmount, ratio, Time.deltaTime * 8f);
 
         // Orange-red flash when below 25% stamina.
         fill.color = ratio < 0.25f

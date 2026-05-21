@@ -638,6 +638,7 @@ GameObject:
   - component: {fileID: 3646284421181614255}
   - component: {fileID: 2530916843356349109}
   - component: {fileID: 1861452668235949259}
+  - component: {fileID: 7654321098765432}
   m_Layer: 8
   m_Name: Player2
   m_TagString: Untagged
@@ -910,7 +911,7 @@ MonoBehaviour:
     hasUpgradedBrainParametersWithActionSpec: 1
   m_Model: {fileID: 0}
   m_InferenceDevice: 0
-  m_BehaviorType: 1
+  m_BehaviorType: 0
   m_BehaviorName: PushmanAgent
   TeamId: 0
   m_UseChildSensors: 1
@@ -958,6 +959,20 @@ MonoBehaviour:
   rotationDeadzone: 5
   pushChance: 0.3
   blockChance: 0.2
+--- !u!114 &7654321098765432
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5151035569957871751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a5c9d521e5ef4759a8246a07d52221e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.DecisionRequester
+  DecisionPeriod: 5
+  TakeActionsBetweenDecisions: 1
 --- !u!1 &5547442708109052717
 GameObject:
   m_ObjectHideFlags: 0

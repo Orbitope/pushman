@@ -119,8 +119,6 @@ public class Player : MonoBehaviour
             targetColor = new Color(0.5f, 0.8f, 1f);  // blue flash while dodging
         else if (currentState == PlayerState.Charging)
             targetColor = Color.white * 1.2f;           // bright white while charging
-        else if (stats != null && currentStamina < stats.maxStamina * 0.2f)
-            targetColor = new Color(1f, 0.5f, 0.5f);   // red tint when low stamina
         else
             targetColor = baseColor;
 

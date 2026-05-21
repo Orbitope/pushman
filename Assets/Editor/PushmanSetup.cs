@@ -19,8 +19,10 @@ public static class PushmanSetup
     private const string ARENA_PREFAB_PATH = PREFAB_FOLDER + "/Arena.prefab";
     private const string PLAYER_RL_PREFAB_PATH = PREFAB_FOLDER + "/Player_RL.prefab";
     private const string TRAINING_SCENE_PATH = "Assets/Scenes/ML_Training_Scene.unity";
-    private const int GRID_SIZE = 8;          // GRID_SIZE × GRID_SIZE arenas
+    private const int GRID_SIZE = 8;           // GRID_SIZE × GRID_SIZE arenas (full training)
+    private const int GRID_SIZE_SMALL = 4;    // smaller grid for fast/dev runs (4×4 = 16 arenas)
     private const float ARENA_SPACING = 25f;  // must be > ringOutRadius*2 so players can't cross arenas
+    private const string TRAINING_SCENE_SMALL_PATH = "Assets/Scenes/ML_Training_Scene_Small.unity";
 
     // -----------------------------------------------------------------------
     // 1. Setup Test Scene
@@ -152,6 +154,161 @@ public static class PushmanSetup
     }
 
     // -----------------------------------------------------------------------
+    // 5. Bot vs Bot Scene — both players run ONNX inference, no human input
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/5. Bot vs Bot Scene")]
+    public static void BuildBotVsBotScene()
+    {
+        // Find the most recently modified ONNX in Assets/MLModels/
+        const string MODELS_FOLDER = "Assets/MLModels";
+        const string DEFAULT_ONNX  = MODELS_FOLDER + "/Aggressive_Default/PushmanAgent.onnx";
+
+        string onnxPath = DEFAULT_ONNX;
+        var allOnnx = AssetDatabase.FindAssets("t:Object", new[] { MODELS_FOLDER });
+        string newestPath = null;
+        System.DateTime newestTime = System.DateTime.MinValue;
+        foreach (var guid in allOnnx)
+        {
+            string p = AssetDatabase.GUIDToAssetPath(guid);
+            if (!p.EndsWith(".onnx")) continue;
+            System.DateTime t = File.GetLastWriteTime(p);
+            if (t > newestTime) { newestTime = t; newestPath = p; }
+        }
+        if (newestPath != null) onnxPath = newestPath;
+
+        var model = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(onnxPath);
+        if (model == null)
+            Debug.LogWarning($"[PushmanSetup] No ONNX found at {onnxPath}. " +
+                             "Build the scene anyway — assign the model manually in BehaviorParameters.");
+        else
+            Debug.Log($"[PushmanSetup] Using model: {onnxPath}");
+
+        EnsureFolders();
+        var stats       = CreateOrLoad<CharacterStats>("Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        InitCharacterStats(stats);
+        var profileA    = CreateOrLoad<ObservationProfile>("Assets/ScriptableObjects/Observation/Profile_A.asset");
+        var personality = CreateOrLoad<BotPersonality>("Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        AssetDatabase.SaveAssets();
+
+        int playerLayer = GetOrAddLayer("Player");
+        CleanupObject("Arena");
+
+        GameObject arena  = new GameObject("Arena");
+        GameObject center = CreateChild("ArenaCenter", arena);
+        center.transform.localPosition = Vector3.zero;
+
+        var spawnPositions = new Vector3[] {
+            new Vector3(-4f,  0f, 0f),
+            new Vector3( 4f,  0f, 0f),
+            new Vector3( 0f,  4f, 0f),
+            new Vector3( 0f, -4f, 0f),
+        };
+        var spawnGOs = new List<GameObject>();
+        for (int i = 0; i < spawnPositions.Length; i++)
+        {
+            var sp = CreateChild($"SpawnPoint_{i + 1}", arena);
+            sp.transform.localPosition = spawnPositions[i];
+            spawnGOs.Add(sp);
+        }
+
+        // Both players — RLAgentBrain, InferenceOnly
+        GameObject p1GO = BuildBotPlayer("Player1", stats, playerLayer, arena,
+                                         spawnPositions[0], profileA, personality, model);
+        GameObject p2GO = BuildBotPlayer("Player2", stats, playerLayer, arena,
+                                         spawnPositions[1], profileA, personality, model);
+        Player p1 = p1GO.GetComponent<Player>();
+        Player p2 = p2GO.GetComponent<Player>();
+
+        int oppMask = 1 << playerLayer;
+        p1.opponentLayer = oppMask;
+        p2.opponentLayer = oppMask;
+
+        ArenaManager am = arena.AddComponent<ArenaManager>();
+        am.arenaCenter   = center.transform;
+        am.ringOutRadius = 10f;
+        am.allPlayers    = new List<Player> { p1, p2 };
+        am.spawnPoints   = new List<Transform>();
+        foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+
+        // Wire each brain's arena + opponent references
+        foreach (var rl in arena.GetComponentsInChildren<RLAgentBrain>())
+        {
+            rl.arenaManager = am;
+            Player self = rl.GetComponent<Player>();
+            rl.opponents = self == p1 ? new Player[] { p2 } : new Player[] { p1 };
+            EditorUtility.SetDirty(rl);
+        }
+
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            cam.orthographic     = true;
+            cam.orthographicSize = 12f;
+            cam.transform.position = new Vector3(0f, 0f, -10f);
+            EditorUtility.SetDirty(cam);
+        }
+
+        EditorUtility.SetDirty(am);
+        EditorUtility.SetDirty(p1);
+        EditorUtility.SetDirty(p2);
+
+        // Sprites + HUD (reuse existing step 4)
+        AddSpritesToPlayers();
+
+        // Save to a dedicated scene file and add to Build Settings
+        const string BOT_VS_BOT_SCENE_PATH = "Assets/Scenes/BotVsBot.unity";
+        EnsureFolders();
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), BOT_VS_BOT_SCENE_PATH);
+
+        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!scenes.Exists(s => s.path == BOT_VS_BOT_SCENE_PATH))
+            scenes.Add(new EditorBuildSettingsScene(BOT_VS_BOT_SCENE_PATH, false));
+        EditorBuildSettings.scenes = scenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log("[PushmanSetup] Bot vs Bot scene saved → Assets/Scenes/BotVsBot.unity. " +
+                  "Press Play to watch. To swap models: select a player → BehaviorParameters → Model.");
+    }
+
+    // Builds a player GO fully wired for RL inference.
+    private static GameObject BuildBotPlayer(string playerName, CharacterStats stats,
+                                              int layer, GameObject arena, Vector3 spawnPos,
+                                              ObservationProfile profile, BotPersonality personality,
+                                              UnityEngine.Object onnxModel)
+    {
+        GameObject go = BuildPlayerGO(playerName, stats, layer, arena);
+        go.transform.localPosition = spawnPos;
+
+        var rl = go.AddComponent<RLAgentBrain>();
+        rl.MaxStep            = 5000;
+        rl.observationProfile = profile;
+        rl.personality        = personality;
+
+        ConfigureBehaviorParameters(go);
+        var bp = go.GetComponent<BehaviorParameters>();
+        bp.BehaviorType = BehaviorType.InferenceOnly;
+
+        // Assign ONNX model via SerializedObject to avoid hard Barracuda/Sentis type dependency
+        if (onnxModel != null)
+        {
+            var so = new SerializedObject(bp);
+            var modelProp = so.FindProperty("m_Model");
+            if (modelProp != null)
+            {
+                modelProp.objectReferenceValue = onnxModel;
+                so.ApplyModifiedProperties();
+            }
+        }
+
+        var dr = go.AddComponent<DecisionRequester>();
+        dr.DecisionPeriod = 5;
+
+        EditorUtility.SetDirty(go);
+        return go;
+    }
+
+    // -----------------------------------------------------------------------
     // 2. Save Prefabs
     // -----------------------------------------------------------------------
 
@@ -250,6 +407,60 @@ public static class PushmanSetup
                   $"({ARENA_SPACING}u spacing). Saved → {TRAINING_SCENE_PATH}");
         Debug.Log("[PushmanSetup] Note: arenas are isolated by distance — players ring out before " +
                   "they can reach a neighbouring arena (ringOutRadius=10, spacing=25).");
+    }
+
+    // -----------------------------------------------------------------------
+    // 3b. Build Small Training Scene — 4×4 = 16 arenas for fast/dev runs
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/3b. Build Small Training Scene (4x4, fast)")]
+    public static void BuildSmallTrainingScene()
+    {
+        var arenaPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ARENA_PREFAB_PATH);
+        if (arenaPrefab == null)
+        {
+            Debug.LogError("[PushmanSetup] Arena prefab not found. Run '2. Save Prefabs' first.");
+            return;
+        }
+
+        var profileA    = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+                            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+        var personality = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+                            "Assets/ScriptableObjects/Personalities/Aggressive.asset");
+
+        var trainingScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        int total = GRID_SIZE_SMALL * GRID_SIZE_SMALL;
+        int arenaIndex = 0;
+
+        for (int row = 0; row < GRID_SIZE_SMALL; row++)
+        {
+            for (int col = 0; col < GRID_SIZE_SMALL; col++)
+            {
+                Vector3 offset = new Vector3(col * ARENA_SPACING, row * ARENA_SPACING, 0f);
+                GameObject arenaGO = PrefabUtility.InstantiatePrefab(arenaPrefab) as GameObject;
+                arenaGO.name = $"Arena_{arenaIndex}";
+                arenaGO.transform.position = offset;
+
+                ArenaManager am = arenaGO.GetComponent<ArenaManager>();
+                if (am != null)
+                    WireArena(arenaGO, am, profileA, personality);
+
+                arenaIndex++;
+            }
+        }
+
+        EnsureFolders();
+        EditorSceneManager.SaveScene(trainingScene, TRAINING_SCENE_SMALL_PATH);
+
+        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!scenes.Exists(s => s.path == TRAINING_SCENE_SMALL_PATH))
+            scenes.Add(new EditorBuildSettingsScene(TRAINING_SCENE_SMALL_PATH, true));
+        EditorBuildSettings.scenes = scenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log($"[PushmanSetup] Small training scene built: {GRID_SIZE_SMALL}×{GRID_SIZE_SMALL} = {total} arenas. " +
+                  $"Saved → {TRAINING_SCENE_SMALL_PATH}");
     }
 
     // -----------------------------------------------------------------------
@@ -812,7 +1023,7 @@ public static class PushmanSetup
         if (bp == null) bp = go.AddComponent<BehaviorParameters>();
 
         bp.BehaviorName = "PushmanAgent";
-        bp.BehaviorType = BehaviorType.HeuristicOnly;
+        bp.BehaviorType = BehaviorType.Default; // Default = trainer controls; change to HeuristicOnly for manual play
 
         // Derive space size from the ObservationProfile asset so it stays in sync
         // if anyone toggles profile flags — avoids hard ML-Agents runtime errors.
