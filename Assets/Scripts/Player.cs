@@ -12,10 +12,7 @@ public class Player : MonoBehaviour
     public float pushHitRadius = 0.6f;
     public float pushHitOffset = 0.7f;
 
-    [Header("UI")]
-    // Green fill SpriteRenderer — X scale is driven by UpdateUI() to show stamina.
-    // No Canvas/Slider needed; avoids world-space canvas scale issues entirely.
-    public SpriteRenderer staminaFill;
+    // Stamina UI is handled by StaminaHUD (screen-space canvas) — no field needed here.
 
     [Header("Visuals")]
     public SpriteRenderer pushHand;    // assigned by PushmanSetup or auto-discovered
@@ -98,23 +95,8 @@ public class Player : MonoBehaviour
             currentStamina = Mathf.Min(stats.maxStamina, currentStamina + stats.staminaRegenRate * Time.deltaTime);
         }
 
-        UpdateUI();
         UpdateStateColor();
         UpdateHands();
-    }
-
-    private void UpdateUI()
-    {
-        if (staminaFill == null || stats == null) return;
-
-        float ratio     = Mathf.Clamp01(currentStamina / stats.maxStamina);
-        const float BAR = 0.8f;          // full-width of the bar in world units (matches setup)
-        float w         = BAR * ratio;   // current fill width
-
-        // Scale fill to current width, shift so it's left-anchored.
-        Vector3 lp = staminaFill.transform.localPosition;
-        staminaFill.transform.localScale    = new Vector3(w, staminaFill.transform.localScale.y, 1f);
-        staminaFill.transform.localPosition = new Vector3(-BAR * 0.5f + w * 0.5f, lp.y, lp.z);
     }
 
     private void UpdateHands()

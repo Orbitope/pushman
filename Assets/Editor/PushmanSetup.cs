@@ -264,11 +264,7 @@ public static class PushmanSetup
                                    () => MakeRectTexture(48, 10));
         Sprite ringSprite    = GetOrCreateSprite("Assets/Sprites/ArenaBoundary.png",
                                    () => MakeRingTexture(256, 8));
-        Sprite barSprite     = GetOrCreateSprite("Assets/Sprites/StaminaBar.png",
-                                   () => MakeRectTexture(100, 10));  // 1.0u × 0.1u native; scale to match bar dims
-
-        if (circleSprite == null || pushSprite == null || blockSprite == null ||
-            ringSprite   == null || barSprite  == null)
+        if (circleSprite == null || pushSprite == null || blockSprite == null || ringSprite == null)
         {
             Debug.LogError("[PushmanSetup] Failed to create one or more sprite assets.");
             return;
@@ -286,9 +282,8 @@ public static class PushmanSetup
             ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite,
                                new Color(0.8f, 0.2f, 0.2f));  // red
 
-        // --- Stamina bars ---
-        if (p1GO != null) AddStaminaBarToPlayer(p1GO, barSprite);
-        if (p2GO != null) AddStaminaBarToPlayer(p2GO, barSprite);
+        // --- Screen-space stamina HUD (replaces old world-space bars) ---
+        if (p1GO != null || p2GO != null) CreateStaminaHUD(p1GO, p2GO);
 
         // --- Arena boundary ring ---
         GameObject arenaGO = GameObject.Find("Arena");
@@ -296,7 +291,7 @@ public static class PushmanSetup
             ApplyArenaBoundary(arenaGO, ringSprite, ringOutRadius: 10f);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        Debug.Log("[PushmanSetup] Sprites + stamina bars applied. Green=P1, Red=P2.");
+        Debug.Log("[PushmanSetup] Sprites + screen-space HUD applied. Green=P1 (bottom-left), Red=P2 (bottom-right).");
     }
 
     // Assign body circle, create hand children, wire PlayerVisuals.
@@ -310,9 +305,12 @@ public static class PushmanSetup
         sr.color        = tint;
         sr.sortingOrder = 0;
 
-        // Remove stale hand objects
+        // Remove stale children
         DestroyChild(playerGO, "PushHand");
         DestroyChild(playerGO, "BlockHand");
+        DestroyChild(playerGO, "StaminaBarBG");    // old world-space bars
+        DestroyChild(playerGO, "StaminaBarFill");
+        DestroyChild(playerGO, "StaminaCanvas");
 
         // Push hand — bright white fist in front of the player so it contrasts against the colored body
         var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, Color.white,
@@ -363,51 +361,116 @@ public static class PushmanSetup
         EditorUtility.SetDirty(go);
     }
 
-    // World-space stamina bar using plain SpriteRenderers — avoids Canvas/Slider scale issues.
-    // Two quads: dark background (full width always) + green fill (X-scaled by Player.UpdateUI).
-    private static void AddStaminaBarToPlayer(GameObject playerGO, Sprite barSprite)
+    // Screen-space overlay HUD: P1 stamina bar bottom-left (green), P2 bottom-right (red).
+    // Uses Image.Type.Filled so fill amount drives the bar width with no scale tricks.
+    private static void CreateStaminaHUD(GameObject p1GO, GameObject p2GO)
     {
-        // Idempotent: destroy old bar objects first.
-        DestroyChild(playerGO, "StaminaBarBG");
-        DestroyChild(playerGO, "StaminaBarFill");
-        DestroyChild(playerGO, "StaminaCanvas");   // remove old Canvas-based bar if present
+        // Idempotent: remove any existing HUD canvas.
+        var existing = GameObject.Find("StaminaHUD");
+        if (existing != null) Object.DestroyImmediate(existing);
 
-        // Sprite is 100×10 px at 100 PPU  →  native world size = 1.0u × 0.1u.
-        // localScale.x = 0.80  →  world width  = 1.0 × 0.80 = 0.80u
-        // localScale.y = 0.70  →  world height = 0.1 × 0.70 = 0.07u
-        const float BAR_Y     = 0.85f;
+        // Root HUD object — Screen Space Overlay canvas.
+        var hudGO = new GameObject("StaminaHUD");
+        var canvas = hudGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 10;
+        hudGO.AddComponent<UnityEngine.UI.CanvasScaler>();
+        hudGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-        // Background — slightly wider/taller so the border shows.
-        var bgGO = new GameObject("StaminaBarBG");
-        bgGO.transform.SetParent(playerGO.transform, false);
-        bgGO.transform.localPosition = new Vector3(0f, BAR_Y, 0f);
-        bgGO.transform.localScale    = new Vector3(0.84f, 0.90f, 1f);  // 0.84u × 0.09u world
-        var bgSR = bgGO.AddComponent<SpriteRenderer>();
-        bgSR.sprite       = barSprite;
-        bgSR.color        = new Color(0.1f, 0.1f, 0.1f, 0.85f);
-        bgSR.sortingOrder = 2;
+        // P1 bar — bottom-left, green.
+        Image p1Fill = CreateBarUI(hudGO.transform, isLeft: true,
+                                   new Color(0.2f, 0.85f, 0.2f));   // green
 
-        // Fill — starts at full width (localScale.x = 0.80); Player.UpdateUI() scales & shifts X.
-        var fillGO = new GameObject("StaminaBarFill");
-        fillGO.transform.SetParent(playerGO.transform, false);
-        fillGO.transform.localPosition = new Vector3(0f, BAR_Y, 0f);
-        fillGO.transform.localScale    = new Vector3(0.80f, 0.70f, 1f);  // 0.80u × 0.07u world
-        var fillSR = fillGO.AddComponent<SpriteRenderer>();
-        fillSR.sprite       = barSprite;
-        fillSR.color        = new Color(0.2f, 0.85f, 0.2f, 1f);
-        fillSR.sortingOrder = 3;
+        // P2 bar — bottom-right, red.
+        Image p2Fill = CreateBarUI(hudGO.transform, isLeft: false,
+                                   new Color(0.85f, 0.2f, 0.2f));   // red
 
-        // Wire to Player.staminaFill
-        var player = playerGO.GetComponent<Player>();
-        if (player != null)
+        // Wire StaminaHUD via reflection — avoids a hard compile-time editor→runtime dependency.
+        // StaminaHUD.Start() also auto-discovers players by name as a fallback.
+        System.Type hudType = null;
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
         {
-            var so = new SerializedObject(player);
-            so.FindProperty("staminaFill").objectReferenceValue = fillSR;
-            so.ApplyModifiedProperties();
-            EditorUtility.SetDirty(player);
+            try { hudType = asm.GetType("StaminaHUD"); } catch { }
+            if (hudType != null) break;
         }
 
-        EditorUtility.SetDirty(playerGO);
+        if (hudType != null)
+        {
+            var hud = hudGO.AddComponent(hudType);
+            var so  = new SerializedObject(hud);
+            if (p1GO != null)
+                so.FindProperty("player1").objectReferenceValue = p1GO.GetComponent<Player>();
+            if (p2GO != null)
+                so.FindProperty("player2").objectReferenceValue = p2GO.GetComponent<Player>();
+            so.FindProperty("p1Fill").objectReferenceValue  = p1Fill;
+            so.FindProperty("p2Fill").objectReferenceValue  = p2Fill;
+            so.ApplyModifiedProperties();
+        }
+        else
+        {
+            Debug.LogWarning("[PushmanSetup] StaminaHUD type not found in loaded assemblies — " +
+                             "HUD canvas created without the component. It will auto-wire at runtime.");
+        }
+
+        EditorUtility.SetDirty(hudGO);
+    }
+
+    // Creates one stamina bar anchored to the bottom-left (isLeft=true) or bottom-right.
+    // Returns the fill Image so StaminaHUD can update it each frame.
+    private static Image CreateBarUI(Transform hudParent, bool isLeft, Color fillColor)
+    {
+        const float BAR_W  = 300f;
+        const float BAR_H  = 28f;
+        const float MARGIN = 20f;
+
+        // Container
+        var barGO = new GameObject(isLeft ? "P1Bar" : "P2Bar");
+        barGO.transform.SetParent(hudParent, false);
+        var barRT = barGO.AddComponent<RectTransform>();
+
+        if (isLeft)
+        {
+            barRT.anchorMin        = new Vector2(0f, 0f);
+            barRT.anchorMax        = new Vector2(0f, 0f);
+            barRT.pivot            = new Vector2(0f, 0f);
+            barRT.anchoredPosition = new Vector2(MARGIN, MARGIN);
+        }
+        else
+        {
+            barRT.anchorMin        = new Vector2(1f, 0f);
+            barRT.anchorMax        = new Vector2(1f, 0f);
+            barRT.pivot            = new Vector2(1f, 0f);
+            barRT.anchoredPosition = new Vector2(-MARGIN, MARGIN);
+        }
+        barRT.sizeDelta = new Vector2(BAR_W, BAR_H);
+
+        // Background image
+        var bgGO = new GameObject("Background");
+        bgGO.transform.SetParent(barGO.transform, false);
+        var bgRT = bgGO.AddComponent<RectTransform>();
+        bgRT.anchorMin = Vector2.zero;
+        bgRT.anchorMax = Vector2.one;
+        bgRT.offsetMin = Vector2.zero;
+        bgRT.offsetMax = Vector2.zero;
+        var bgImg = bgGO.AddComponent<Image>();
+        bgImg.color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+
+        // Fill image — Filled type drives bar width from left.
+        var fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(barGO.transform, false);
+        var fillRT = fillGO.AddComponent<RectTransform>();
+        fillRT.anchorMin = Vector2.zero;
+        fillRT.anchorMax = Vector2.one;
+        fillRT.offsetMin = new Vector2(2f, 2f);
+        fillRT.offsetMax = new Vector2(-2f, -2f);
+        var fillImg = fillGO.AddComponent<Image>();
+        fillImg.color      = fillColor;
+        fillImg.type       = Image.Type.Filled;
+        fillImg.fillMethod = Image.FillMethod.Horizontal;
+        fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fillImg.fillAmount = 1f;
+
+        return fillImg;
     }
 
     // -----------------------------------------------------------------------
@@ -764,10 +827,10 @@ public static class PushmanSetup
         stats.weight                = 1f;
         stats.movementSpeed         = 6f;
         stats.maxStamina            = 100f;
-        stats.staminaRegenRate      = 12f;
-        stats.blockStaminaUsageRate = 18f;
+        stats.staminaRegenRate      = 8f;
+        stats.blockStaminaUsageRate = 15f;
         stats.dodgeForce            = 10f;
-        stats.dodgeStamina          = 25f;
+        stats.dodgeStamina          = 40f;
         stats.dodgeTime             = 0.25f;
         stats.pushForce             = 8f;
         stats.pushStamina           = 20f;

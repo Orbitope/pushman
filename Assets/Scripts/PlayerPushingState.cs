@@ -10,14 +10,17 @@ public class PlayerPushingState : PlayerStateBase
             ? player.chargingStateScript.currentChargeTime / player.stats.pushChargeTime
             : 0f;
 
-        if (!player.CanUseStamina(player.stats.pushStamina))
+        // Stamina cost scales with charge: base cost at tap, up to 2× at full charge.
+        float staminaCost = player.stats.pushStamina * (1f + chargeNorm);
+
+        if (!player.CanUseStamina(staminaCost))
         {
-            (player.Brain as RLAgentBrain)?.AddWastedStaminaPenalty(player.stats.pushStamina);
+            (player.Brain as RLAgentBrain)?.AddWastedStaminaPenalty(staminaCost);
             player.SetState(Player.PlayerState.Moving);
             return;
         }
 
-        player.UseStamina(player.stats.pushStamina);
+        player.UseStamina(staminaCost);
         if (player.animator != null) player.animator.SetTrigger("Push");
         player.ExecutePush(chargeNorm);
     }
