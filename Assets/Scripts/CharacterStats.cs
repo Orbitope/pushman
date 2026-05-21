@@ -14,7 +14,7 @@ public class CharacterStats : ScriptableObject
 
     [Header("Stamina Regen Boost")]
     [Tooltip("Seconds spent in Moving state before the regen boost activates. Rewards disengaging.")]
-    public float regenBoostThreshold = 1.5f;
+    public float regenBoostThreshold = 0.75f;
     [Tooltip("Multiplier applied to staminaRegenRate after regenBoostThreshold is reached.")]
     public float regenBoostMultiplier = 2.5f;
 
@@ -22,7 +22,7 @@ public class CharacterStats : ScriptableObject
     [Tooltip("Allow a dodge even when stamina would go negative. Must not already be in overdraft debt.")]
     public bool allowDodgeOverdraft = true;
     [Tooltip("Seconds regen is paused after an overdraft dodge resolves back to Moving.")]
-    public float overdraftPauseDuration = 3.0f;
+    public float overdraftPauseDuration = 1.5f;
 
     [Header("Dodge")]
     public float dodgeForce = 18f;

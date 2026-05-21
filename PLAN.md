@@ -45,12 +45,12 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 |---|---|
 | maxStamina | 100 |
 | staminaRegenRate | 8/s (Moving only) |
-| regenBoostThreshold | 1.5s in Moving state |
+| regenBoostThreshold | 0.75s in Moving state |
 | regenBoostMultiplier | 2.5× (= 20/s boosted rate) |
 | blockDrain | 15/s |
 | dodgeStamina | 40 (tap costs 40%) |
 | allowDodgeOverdraft | true |
-| overdraftPauseDuration | 3.0s regen lockout |
+| overdraftPauseDuration | 1.5s regen lockout |
 | dodgeForce | 18 (damping zeroed during dash) |
 | pushStamina | 20–40 (scales with charge) |
 | pushChargeTime | 1s |
