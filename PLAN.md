@@ -112,8 +112,25 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
   - `dodgeForce` 10 → **18** (travels ~4.5 units in 0.25s — readable as a distinct action)
 - ✅ **Camera** (2026-05-20) — orthographic size set to 12 (shows full 20u ring + 2u padding each side, static)
 
+### Pending — Bugs (pre-identified, not yet hit in testing)
+
+**Definite / likely to hit:**
+- ❌ **Ring shrink is invisible** — `ArenaManager` correctly shrinks `currentRingRadius` after 30s of inactivity, but `ArenaBoundary` SpriteRenderer scale is baked at setup time. Players ring out at an invisible boundary inside the visible ring. Fix: `ArenaManager` must update the `ArenaBoundary` child's scale each frame to match `currentRingRadius`.
+- ❌ **No round-reset feedback** — when a ring-out occurs, players just teleport with no pause, flash, or score display. Will be confusing during testing. Fix: brief freeze-frame or color flash on ring-out + simple score counter UI.
+- ❌ **Input priority: accidental mouse hold blocks dodge** — `PlayerMovingState` checks push → block → dodge in order. Holding left mouse + pressing Space enters Charging, not Dodging. Likely to feel like "dodge is broken" to new players. Fix: either consume `wasPressedThisFrame` for dodge regardless of mouse state, or document as intentional trade-off.
+- ❌ **`CharacterStats.cs` C# field defaults are stale** — class defaults (`dodgeForce=12`, `dodgeStamina=20`, `blockUsageRate=20`) don't match `DefaultStats.asset` or `InitCharacterStats()`. New assets created from the menu will have wrong values. Fix: sync C# defaults to match the tuned values.
+
+**Medium risk — training-relevant:**
+- ❌ **`FindObjectsByType<Player>()` called every `Update()` in all 3 bot brains** — fine in the test scene (1 arena), but in the 64-arena training scene this is hundreds of expensive searches per frame. Fix: cache the target in `Start()` or have the bot brain accept a direct reference via an inspector field or `ArenaManager`.
+- ❌ **`DodgingBotBrain.wantDodge` is single-frame, execution-order dependent** — the flag is true for exactly one frame. If `Player.Update()` runs before `DodgingBotBrain.Update()` that frame, the dodge input is silently missed. Script execution order is not configured. Fix: use a persistent flag that clears only after `GetDodgeInput()` is read, or configure Script Execution Order.
+- ❌ **Observation space size hard-coded at 13; will break if `ObservationProfile` changes** — if any flag in `Profile_A.asset` is toggled, actual collected observations diverge from `VectorObservationSize = 13`, causing a hard ML-Agents runtime error. Fix: call `observationProfile.ComputeSpaceSize()` when setting up `BehaviorParameters` rather than using `OBS_SIZE` constant.
+
+**Design ambiguities to confirm during play:**
+- ❓ **Dodge bypasses block** — `HandleDodgeCollision` doesn't check if the target is blocking. A dodge-tackle always stuns regardless of block stance. Possibly intentional (dodge = block-breaker) but undocumented. Decide and document.
+- ❓ **Push fires on mouse RELEASE, not press** — holding left mouse charges, releasing fires the push. Correct fighting-game design but unintuitive for new players expecting click = push.
+
 ### Pending — Visual Polish
-- ❌ **Stamina bars: real-time drain animation** — the `StaminaHUD` fill bars update each frame but the instant snap may feel abrupt; add a smooth lerp to `fillAmount` so the drain is visually animated rather than a hard cut. Consider a "ghost" secondary bar that lags behind to show recent damage (common in fighting games).
+- ❌ **Stamina bars: real-time drain animation** — the `StaminaHUD` fill bars update each frame but the instant snap may feel abrupt; add a smooth lerp to `fillAmount` so the drain is visually animated rather than a hard cut. Consider a "ghost" secondary bar that lags behind to show recent stamina loss (common in fighting games — the gap between the ghost and the live bar shows the cost of the action just taken).
 - ❌ **Remove body color-change as stamina indicator** — the red tint on <20% stamina in `Player.UpdateStateColor()` is redundant now that the HUD bars exist. Remove or repurpose it so color change only reflects state (stunned/dodging/charging), not stamina.
 
 ---
