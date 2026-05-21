@@ -264,8 +264,11 @@ public static class PushmanSetup
                                    () => MakeRectTexture(48, 10));
         Sprite ringSprite    = GetOrCreateSprite("Assets/Sprites/ArenaBoundary.png",
                                    () => MakeRingTexture(256, 8));
+        Sprite barSprite     = GetOrCreateSprite("Assets/Sprites/StaminaBar.png",
+                                   () => MakeRectTexture(100, 10));  // 1.0u × 0.1u native; scale to match bar dims
 
-        if (circleSprite == null || pushSprite == null || blockSprite == null || ringSprite == null)
+        if (circleSprite == null || pushSprite == null || blockSprite == null ||
+            ringSprite   == null || barSprite  == null)
         {
             Debug.LogError("[PushmanSetup] Failed to create one or more sprite assets.");
             return;
@@ -284,8 +287,8 @@ public static class PushmanSetup
                                new Color(0.8f, 0.2f, 0.2f));  // red
 
         // --- Stamina bars ---
-        if (p1GO != null) AddStaminaBarToPlayer(p1GO);
-        if (p2GO != null) AddStaminaBarToPlayer(p2GO);
+        if (p1GO != null) AddStaminaBarToPlayer(p1GO, barSprite);
+        if (p2GO != null) AddStaminaBarToPlayer(p2GO, barSprite);
 
         // --- Arena boundary ring ---
         GameObject arenaGO = GameObject.Find("Arena");
@@ -360,74 +363,51 @@ public static class PushmanSetup
         EditorUtility.SetDirty(go);
     }
 
-    // World-space stamina bar above the player. Recreated on every run so it's idempotent.
-    private static void AddStaminaBarToPlayer(GameObject playerGO)
+    // World-space stamina bar using plain SpriteRenderers — avoids Canvas/Slider scale issues.
+    // Two quads: dark background (full width always) + green fill (X-scaled by Player.UpdateUI).
+    private static void AddStaminaBarToPlayer(GameObject playerGO, Sprite barSprite)
     {
-        DestroyChild(playerGO, "StaminaCanvas");
+        // Idempotent: destroy old bar objects first.
+        DestroyChild(playerGO, "StaminaBarBG");
+        DestroyChild(playerGO, "StaminaBarFill");
+        DestroyChild(playerGO, "StaminaCanvas");   // remove old Canvas-based bar if present
 
-        // Canvas — IMPORTANT: set localScale AFTER AddComponent<Canvas>() because
-        // adding Canvas promotes Transform → RectTransform and resets the scale to (1,1,1).
-        var canvasGO = new GameObject("StaminaCanvas");
-        canvasGO.transform.SetParent(playerGO.transform);
-        canvasGO.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+        // Sprite is 100×10 px at 100 PPU  →  native world size = 1.0u × 0.1u.
+        // localScale.x = 0.80  →  world width  = 1.0 × 0.80 = 0.80u
+        // localScale.y = 0.70  →  world height = 0.1 × 0.70 = 0.07u
+        const float BAR_Y     = 0.85f;
 
-        var canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        var crt = canvasGO.GetComponent<RectTransform>();
-        crt.sizeDelta   = new Vector2(80f, 10f);   // 80×10 UI px
-        crt.localScale  = Vector3.one * 0.01f;     // → 0.80×0.10 world units
+        // Background — slightly wider/taller so the border shows.
+        var bgGO = new GameObject("StaminaBarBG");
+        bgGO.transform.SetParent(playerGO.transform, false);
+        bgGO.transform.localPosition = new Vector3(0f, BAR_Y, 0f);
+        bgGO.transform.localScale    = new Vector3(0.84f, 0.90f, 1f);  // 0.84u × 0.09u world
+        var bgSR = bgGO.AddComponent<SpriteRenderer>();
+        bgSR.sprite       = barSprite;
+        bgSR.color        = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+        bgSR.sortingOrder = 2;
 
-        // Background
-        var bgGO  = new GameObject("Background");
-        bgGO.transform.SetParent(canvasGO.transform);
-        bgGO.transform.localPosition = Vector3.zero;
-        var bgRect = bgGO.AddComponent<RectTransform>();
-        bgRect.anchorMin = Vector2.zero;
-        bgRect.anchorMax = Vector2.one;
-        bgRect.offsetMin = Vector2.zero;
-        bgRect.offsetMax = Vector2.zero;
-        bgGO.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.85f);
+        // Fill — starts at full width (localScale.x = 0.80); Player.UpdateUI() scales & shifts X.
+        var fillGO = new GameObject("StaminaBarFill");
+        fillGO.transform.SetParent(playerGO.transform, false);
+        fillGO.transform.localPosition = new Vector3(0f, BAR_Y, 0f);
+        fillGO.transform.localScale    = new Vector3(0.80f, 0.70f, 1f);  // 0.80u × 0.07u world
+        var fillSR = fillGO.AddComponent<SpriteRenderer>();
+        fillSR.sprite       = barSprite;
+        fillSR.color        = new Color(0.2f, 0.85f, 0.2f, 1f);
+        fillSR.sortingOrder = 3;
 
-        // Fill area + fill image (Slider needs a fill rect)
-        var fillGO  = new GameObject("Fill");
-        fillGO.transform.SetParent(canvasGO.transform);
-        fillGO.transform.localPosition = Vector3.zero;
-        var fillRect = fillGO.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
-        fillRect.offsetMin = Vector2.zero;
-        fillRect.offsetMax = Vector2.zero;
-        fillGO.AddComponent<Image>().color = new Color(0.2f, 0.85f, 0.2f, 0.9f);
-
-        // Slider
-        var sliderGO  = new GameObject("StaminaSlider");
-        sliderGO.transform.SetParent(canvasGO.transform);
-        sliderGO.transform.localPosition = Vector3.zero;
-        var sliderRect = sliderGO.AddComponent<RectTransform>();
-        sliderRect.anchorMin = Vector2.zero;
-        sliderRect.anchorMax = Vector2.one;
-        sliderRect.offsetMin = Vector2.zero;
-        sliderRect.offsetMax = Vector2.zero;
-
-        var slider         = sliderGO.AddComponent<Slider>();
-        slider.minValue    = 0f;
-        slider.maxValue    = 1f;
-        slider.value       = 1f;
-        slider.interactable = false;
-        slider.direction   = Slider.Direction.LeftToRight;
-        slider.fillRect    = fillRect;
-
-        // Wire to Player.staminaSlider
+        // Wire to Player.staminaFill
         var player = playerGO.GetComponent<Player>();
         if (player != null)
         {
             var so = new SerializedObject(player);
-            so.FindProperty("staminaSlider").objectReferenceValue = slider;
+            so.FindProperty("staminaFill").objectReferenceValue = fillSR;
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(player);
         }
 
-        EditorUtility.SetDirty(canvasGO);
+        EditorUtility.SetDirty(playerGO);
     }
 
     // -----------------------------------------------------------------------
@@ -485,10 +465,15 @@ public static class PushmanSetup
     }
 
     // Write texture to disk and import as a Sprite asset; return loaded Sprite.
+    // Checks the physical file first — avoids returning a stale cached asset when
+    // the PNG was deleted from disk but AssetDatabase hasn't refreshed yet.
     private static Sprite GetOrCreateSprite(string assetPath, System.Func<Texture2D> makeTexture)
     {
-        var existing = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-        if (existing != null) return existing;
+        if (File.Exists(assetPath))
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (existing != null) return existing;
+        }
 
         var tex  = makeTexture();
         var png  = tex.EncodeToPNG();
@@ -608,15 +593,14 @@ public static class PushmanSetup
 
         slider.fillRect = fillRect;
 
-        // Wire to Player
-        playerComp.staminaSlider = slider;
-
+        // NOTE: staminaSlider is no longer used — Player now uses staminaFill (SpriteRenderer).
+        // This legacy menu item is kept for reference only. Use '4. Add Sprites to Players' instead.
         EditorUtility.SetDirty(playerComp);
         EditorUtility.SetDirty(canvas);
         EditorUtility.SetDirty(slider);
 
         EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
-        Debug.Log("[PushmanSetup] UI added to Player2. Save scene and re-run '2. Save Prefabs'.");
+        Debug.Log("[PushmanSetup] (Legacy) UI added. Prefer '4. Add Sprites to Players' instead.");
     }
 
     // Wire each arena instance's ArenaManager and RL brains to local scene references.

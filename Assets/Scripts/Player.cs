@@ -1,6 +1,5 @@
 using UnityEngine;
 using System.Collections;
-using UnityEngine.UI;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class Player : MonoBehaviour
@@ -14,7 +13,9 @@ public class Player : MonoBehaviour
     public float pushHitOffset = 0.7f;
 
     [Header("UI")]
-    public Slider staminaSlider;
+    // Green fill SpriteRenderer — X scale is driven by UpdateUI() to show stamina.
+    // No Canvas/Slider needed; avoids world-space canvas scale issues entirely.
+    public SpriteRenderer staminaFill;
 
     [Header("Visuals")]
     public SpriteRenderer pushHand;    // assigned by PushmanSetup or auto-discovered
@@ -103,10 +104,16 @@ public class Player : MonoBehaviour
 
     private void UpdateUI()
     {
-        if (staminaSlider != null && stats != null)
-        {
-            staminaSlider.value = currentStamina / stats.maxStamina;
-        }
+        if (staminaFill == null || stats == null) return;
+
+        float ratio     = Mathf.Clamp01(currentStamina / stats.maxStamina);
+        const float BAR = 0.8f;          // full-width of the bar in world units (matches setup)
+        float w         = BAR * ratio;   // current fill width
+
+        // Scale fill to current width, shift so it's left-anchored.
+        Vector3 lp = staminaFill.transform.localPosition;
+        staminaFill.transform.localScale    = new Vector3(w, staminaFill.transform.localScale.y, 1f);
+        staminaFill.transform.localPosition = new Vector3(-BAR * 0.5f + w * 0.5f, lp.y, lp.z);
     }
 
     private void UpdateHands()
