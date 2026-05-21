@@ -53,18 +53,26 @@ public class RLAgentBrain : Agent, IPlayerBrain
         if (personality.timePenaltyPerStep != 0)
             AddReward(personality.timePenaltyPerStep);
 
-        if (personality.centerControlMultiplier != 0)
+        if (opponents.Length > 0 && opponents[0] != null)
         {
-            float dist = Vector2.Distance(transform.position, arenaManager.arenaCenter.position);
-            float centerScore = 1f - Mathf.Clamp01(dist / arenaManager.CurrentRingRadius);
-            AddReward(centerScore * personality.centerControlMultiplier);
-        }
+            // Mild reward for facing the opponent — encourages engagement over spinning in place.
+            if (personality.facingOpponentMultiplier != 0)
+            {
+                Vector2 dir = (opponents[0].transform.position - transform.position).normalized;
+                float dot = Vector2.Dot(transform.up, dir);
+                if (dot > 0.5f) AddReward(dot * personality.facingOpponentMultiplier);
+            }
 
-        if (personality.facingOpponentMultiplier != 0 && opponents.Length > 0 && opponents[0] != null)
-        {
-            Vector2 dir = (opponents[0].transform.position - transform.position).normalized;
-            float dot = Vector2.Dot(transform.up, dir);
-            if (dot > 0.5f) AddReward(dot * personality.facingOpponentMultiplier);
+            // Reward for pressuring the opponent toward the ring edge.
+            // This replaces center-control: instead of rewarding where WE are,
+            // reward how close THEY are to the boundary.
+            if (personality.opponentEdgePressureMultiplier != 0 && arenaManager != null)
+            {
+                float oppDist = Vector2.Distance(opponents[0].transform.position,
+                                                 arenaManager.arenaCenter.position);
+                float edgePressure = Mathf.Clamp01(oppDist / arenaManager.CurrentRingRadius);
+                AddReward(edgePressure * personality.opponentEdgePressureMultiplier);
+            }
         }
     }
 

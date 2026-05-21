@@ -101,9 +101,41 @@ public static class PushmanSetup
         EditorUtility.SetDirty(p1);
         EditorUtility.SetDirty(p2);
 
-        EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("[PushmanSetup] Test scene ready. Ctrl+S to save. " +
                   "Set Player2 > Behavior Parameters > Behavior Type to 'Default' before training.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 1b. Setup Bot Test Scene  — Player1=Human vs Player2=ChaseBotBrain
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/1b. Setup Bot Test Scene (Human vs ChaseBotBrain)")]
+    public static void SetupBotTestScene()
+    {
+        // Run the full setup first to get a clean scene.
+        SetupTestScene();
+
+        // Swap Player2's brain from RLAgentBrain → ChaseBotBrain.
+        GameObject p2GO = GameObject.Find("Arena/Player2");
+        if (p2GO == null) { Debug.LogError("[PushmanSetup] Player2 not found."); return; }
+
+        // Remove RL-specific components (order matters — Agent subclasses first).
+        var rl = p2GO.GetComponent<RLAgentBrain>();
+        if (rl != null) Object.DestroyImmediate(rl);
+        var dr = p2GO.GetComponent<DecisionRequester>();
+        if (dr != null) Object.DestroyImmediate(dr);
+        var bp = p2GO.GetComponent<BehaviorParameters>();
+        if (bp != null) Object.DestroyImmediate(bp);
+
+        // Add the simple chase bot.
+        p2GO.AddComponent<ChaseBotBrain>();
+
+        // Player.Brain is set in Awake via GetComponent<IPlayerBrain>, so no rewiring needed.
+        EditorUtility.SetDirty(p2GO);
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        Debug.Log("[PushmanSetup] Bot test scene ready. Player1=Human (WASD+mouse), " +
+                  "Player2=ChaseBotBrain. Run '4. Add Sprites to Players' then Ctrl+S.");
     }
 
     // -----------------------------------------------------------------------
