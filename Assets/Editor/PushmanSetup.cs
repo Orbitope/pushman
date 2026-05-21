@@ -120,11 +120,13 @@ public static class PushmanSetup
         GameObject p2GO = GameObject.Find("Arena/Player2");
         if (p2GO == null) { Debug.LogError("[PushmanSetup] Player2 not found."); return; }
 
-        // Remove RL-specific components (order matters — Agent subclasses first).
-        var rl = p2GO.GetComponent<RLAgentBrain>();
-        if (rl != null) Object.DestroyImmediate(rl);
+        // Remove RL-specific components in dependency order (dependents first):
+        //   DecisionRequester requires RLAgentBrain (Agent)
+        //   RLAgentBrain (Agent) requires BehaviorParameters
         var dr = p2GO.GetComponent<DecisionRequester>();
         if (dr != null) Object.DestroyImmediate(dr);
+        var rl = p2GO.GetComponent<RLAgentBrain>();
+        if (rl != null) Object.DestroyImmediate(rl);
         var bp = p2GO.GetComponent<BehaviorParameters>();
         if (bp != null) Object.DestroyImmediate(bp);
 
