@@ -238,109 +238,246 @@ under the terminal win/loss magnitude (target ≈ ±0.5 dense vs ±1.5 terminal)
 
 ---
 
+**How to use this section:** each Phase is a list of Tasks; each Task is a `- [ ]`
+checklist with file paths, exact values, and an acceptance check. A Sonnet session
+should be able to pick up any unchecked Task and execute it without further design
+decisions. Decisions already made are marked `DECISION:`. Tick boxes and flip the
+Section 0 phase status as work completes.
+
 ### Phase 1 — Optimize the master policy (current profiles/styles)
 
 Goal: a genuinely competent baseline bot on Profile A + Aggressive style.
+Effort: ~30 min setup + ~2-3 h unattended training.
 
-**1a. Reward retune** — edit `Aggressive.asset` and `BotPersonality.cs` defaults:
+**Task 1a — Reward retune.**
+- [ ] Edit `Assets/ScriptableObjects/Personalities/Aggressive.asset` (Inspector or YAML):
 
-| Field | Old | New | Reason |
-|---|---|---|---|
-| `facingOpponentMultiplier` | 0.001 | 0.0001 | kill the face-and-survive local optimum |
-| `landPushHit` | 0.1 | 0.2 | reward pushing more (user request) |
-| `takePushHit` | -0.1 | -0.2 | keep symmetric |
-| `opponentEdgePressureMultiplier` | 0.0002 | 0.0004 | reward ring-out pressure (user request) |
-| `timePenaltyPerStep` | -0.0002 | -0.0001 | -1.0/episode is too harsh; -0.5 still punishes stalling |
-| `winRound` | 1.0 | 1.5 | make the ring-out outcome dominate dense shaping |
-| `loseRound` | -1.0 | -1.5 | symmetric |
+  | Field | Old | New |
+  |---|---|---|
+  | `facingOpponentMultiplier` | 0.001 | 0.0001 |
+  | `landPushHit` | 0.1 | 0.2 |
+  | `takePushHit` | -0.1 | -0.2 |
+  | `opponentEdgePressureMultiplier` | 0.0002 | 0.0004 |
+  | `timePenaltyPerStep` | -0.0002 | -0.0001 |
+  | `winRound` | 1.0 | 1.5 |
+  | `loseRound` | -1.0 | -1.5 |
 
-**1b. Use the LSTM baseline config** — `ppo_discrete_baseline.yaml` already has
-`use_recurrent: true`, 128 hidden units, memory 128, 5M steps. ("Reimplement LSTM" =
-the config exists; the fast experiment just didn't use it.)
+- [ ] Update the matching default initializers in `Assets/Scripts/BotPersonality.cs`
+  so future personality assets start from sane numbers.
+- [ ] Reward-budget check: dense per-step shaping over a full 5000-step episode must
+  stay ≈ ±0.5; terminal win/loss is ±1.5.
 
-**1c. Run** — reward assets changed ⇒ standalone rebuild required, then:
-```
-./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_Bot_v2
-```
-Watch TensorBoard: **episode length should fall** over training (faster ring-outs) and
-reward should rise on top of that — that combination means real learning, not stalling.
+**Task 1b — LSTM baseline config.** No work — `ppo_discrete_baseline.yaml` already has
+`use_recurrent: true`, 128 hidden, memory 128, 5M steps. Just confirm it is unchanged.
+("Reimplement LSTM" = the config exists; the fast experiment never used it.)
 
-**1d. Validate** — `Pushman/5` Bot vs Bot scene + human-vs-bot test scene.
+**Task 1c — Rebuild + train.**
+- [ ] Reward asset values changed ⇒ rebuild the standalone in Unity
+  (Build Profiles → macOS → Build → `builds/Pushman_Training`).
+- [ ] Re-apply post-build fixes (see Standalone Build Notes, Section 0):
+  `xattr -dr com.apple.quarantine builds/Pushman_Training/` + the gRPC symlink.
+- [ ] Run: `./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_Bot_v2`
+- [ ] Monitor TensorBoard: **episode length must fall** over training AND reward rise.
+  Both together = real learning. Reward rising while episode length stays pinned at
+  5000 = still stalling → stop and re-check reward scaling.
+
+**Task 1d — Integrate + validate.**
+- [ ] Copy `results/Pushman_Bot_v2/PushmanAgent.onnx` →
+  `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx` (overwrite v1).
+- [ ] `Pushman/5` Bot vs Bot — expect active pushing, real ring-outs, short rounds.
+- [ ] Human-vs-bot test scene — the bot should give a real fight.
+- [ ] Flip Phase 1 → ✅ in Section 0; commit.
 
 ---
 
 ### Phase 2 — Self-play + multi-opponent curriculum (one master network)
 
-Goal: one `PushmanAgent` network that beats varied opponents. Only the master trains;
-opponents are frozen or scripted.
+Goal: one `PushmanAgent` network that beats varied opponents and adapts to any
+`CharacterStats`. Only the master trains; opponents are frozen or scripted.
 
-- **2a. Self-play** — `ppo_selfplay.yaml` already has the `self_play:` block (ELO,
-  snapshots). Run with `--initialize-from=Pushman_Bot_v2` so it starts from the Phase 1
-  policy, not random:
-  `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1`
-- **2b. Scripted-opponent curriculum** — expose the master to the hand-coded bots
-  (`ChaseBotBrain`, `StandingBotBrain`, `DodgingBotBrain`): free, varied, deterministic
-  opponents. New `Pushman/3c` menu item — mixed-opponent scene that randomizes the
-  master's opponent per episode.
-- **2c. Frozen-specialist opponents** — once Phase 3 specialists exist, drop their ONNX
-  into opponent slots as `InferenceOnly`. The master keeps training; specialists stay
-  static. This is how "train against different playstyles, only train the main one" works.
-- **2d. One-network-plays-any-character — CODE CHANGE.** The Section 1 vision needs the
-  agent to observe its own `CharacterStats`; it currently does not. Add a stat block to
-  `CollectObservations` + `ObservationProfile`:
-  - self stats: weight, movementSpeed, pushForce, dodgeForce, maxStamina (5 floats, normalized)
-  - opponent stats: same 5 (optional, behind a profile flag)
-  Then randomize `CharacterStats` per-episode in training so the network learns to
-  condition on them. Without this, a DefaultStats model won't transfer to Heavyweight/Speedster.
+**Task 2a — Add `--init-from` to `train.sh`.**
+- [ ] `train.sh` has no warm-start flag. Add `--init-from=RUN_ID` that appends
+  `--initialize-from=RUN_ID` to the `mlagents-learn` command. Needed by 2e and Phase 3.
+
+**Task 2b — Self-play run.**
+- [ ] `ppo_selfplay.yaml` already has the `self_play:` block (ELO, snapshots, window 10).
+- [ ] Run warm-started from Phase 1:
+  `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1 --init-from=Pushman_Bot_v2`
+- [ ] Monitor TensorBoard `Self-play/ELO` — must climb steadily. Flat ELO = policy not
+  improving vs itself → revisit reward shaping. ~6-10 h (20M cap); stop early on plateau.
+
+**Task 2c — Scripted-opponent curriculum scene (`Pushman/3c`).**
+Purpose: expose the master to the hand-coded bots — free, varied, deterministic
+opponents that stop self-play overfitting to a single style.
+- [ ] Add `Pushman/3c. Build Mixed-Opponent Training Scene` to `PushmanSetup.cs`;
+  use `BuildTrainingScene()` as the template.
+- [ ] DECISION: 6×6 = 36 arenas (divisible by 3). For each arena instance:
+  - Player1 = master `RLAgentBrain`, `BehaviorType.Default` — the only thing that trains.
+  - Player2 = scripted bot by `arenaIndex % 3`: 0 → `ChaseBotBrain`, 1 →
+    `StandingBotBrain`, 2 → `DodgingBotBrain`. Remove Player2's `RLAgentBrain` +
+    `BehaviorParameters` + `DecisionRequester` first (copy the removal order from
+    `SetupBotTestScene`), then add the scripted brain.
+  - `ArenaManager.allPlayers` still lists both; `RegisterWin/Loss` only fire on
+    `RLAgentBrain`, so only the master gets rewards — no `ArenaManager` change needed.
+- [ ] Save to `Assets/Scenes/ML_Training_Mixed.unity`; add to Build Settings.
+- [ ] Acceptance: open the scene, confirm 36 arenas, each Player2 a scripted brain,
+  each Player1 an `RLAgentBrain` with `BehaviorType.Default`.
+
+**Task 2d — Self-observed `CharacterStats` (CODE CHANGE — enables "one network plays
+any character").** The agent does not currently observe its own stats, so a DefaultStats
+model will not transfer to Heavyweight/Speedster.
+- [ ] `Assets/Scripts/ObservationProfile.cs`: add `public bool selfStats = true;` and
+  `public bool opponentStats = false;`. Update `ComputeSpaceSize(oppCount)`: `+5` when
+  `selfStats`, `+5 * oppCount` when `opponentStats`.
+- [ ] `Assets/Scripts/RLAgentBrain.cs` `CollectObservations`: after the `SelfState`
+  block add a `SelfStats` block — 5 normalized floats:
+  `weight/3f, movementSpeed/12f, pushForce/25f, dodgeForce/30f, maxStamina/150f`
+  (norm constants chosen so Default/Heavyweight/Speedster all land in ~0-1). Add an
+  `OpponentStats` block (same 5 fields) inside the opponent loop behind the flag, with
+  zero-padding for null/invisible opponents (match the existing pad logic).
+- [ ] `Assets/Scripts/ArenaManager.cs`: add `public List<CharacterStats> statsPool;`.
+  In `ResetAllPlayers()`, if `statsPool` is non-empty assign each player a random entry
+  (`p.stats = statsPool[Random.Range(0, statsPool.Count)]`). Empty pool = fixed stats.
+- [ ] `Assets/Editor/PushmanSetup.cs`: when building training scenes, populate each
+  `ArenaManager.statsPool` with `DefaultStats`, `Heavyweight`, `Speedster`.
+- [ ] `ConfigureBehaviorParameters` already derives the obs size from
+  `profile.ComputeSpaceSize` — verify it picks up the new size (Profile A: 13 → 18).
+- [ ] This INVALIDATES the old obs space ⇒ a fresh run, not a resume. Rebuild scenes
+  (`Pushman/3`, `3c`) and the standalone.
+
+**Task 2e — Master retrain (stats + curriculum).**
+- [ ] Fresh run (obs space changed): `ppo_discrete_baseline.yaml` on `ML_Training_Mixed`
+  with `statsPool` populated. Run id `Pushman_Master_v1`.
+- [ ] Self-play polish: `ppo_selfplay.yaml --init-from=Pushman_Master_v1`,
+  id `Pushman_Master_SelfPlay_v1`.
+- [ ] Validate in `Pushman/5`: master plays competently as Default, Heavyweight, AND
+  Speedster (swap each player's `CharacterStats`).
+
+**Task 2f — Frozen-specialist opponents (after Phase 3).** Once Phase 3 specialists
+exist, build a scene where Player2 = `RLAgentBrain`, `BehaviorType.InferenceOnly`, with a
+specialist ONNX; Player1 = master, `Default`, trains. This is the literal form of
+"train against different playstyles, only train the main one."
 
 ---
 
 ### Phase 3 — Reward shaping for distinct, effective playstyles
 
-Each `BotPersonality` asset is a different reward function over the SAME master
-architecture. New reward channels to add to `BotPersonality.cs` + `RLAgentBrain.cs`:
+Goal: 5 visibly-distinct, competitive personalities — all the SAME master architecture,
+only the `BotPersonality` reward asset differs.
 
-- `ringOutWinBonus` — extra reward when the win came from a ring-out (vs a timeout)
-- `dodgeEvasionReward` — opponent's push whiffed because we dodged
-- `comboReward` — landed a hit within N steps of a dodge
-- `centerControlMultiplier` — per-step reward for being near center (Defensive)
-- `staminaSavingReward` — terminal reward proportional to leftover stamina (Defensive)
-- `edgeBaitReward` — reward for surviving near the edge (Matador/Trickster)
+**Task 3a — New reward channels (CODE CHANGE).**
+- [ ] `Assets/Scripts/BotPersonality.cs` — add fields:
+  ```
+  [Header("Playstyle Channels")]
+  public float ringOutWinBonus = 0f;        // extra reward when the win is a ring-out
+  public float dodgeEvasionReward = 0f;     // opponent push whiffed while we dodged
+  public float comboReward = 0f;            // hit landed within comboWindowSteps of a dodge
+  public int   comboWindowSteps = 30;
+  public float centerControlMultiplier = 0f;// per-step, reward for being near center
+  public float staminaSavingReward = 0f;    // terminal, scaled by leftover stamina on a win
+  public float edgeBaitMultiplier = 0f;     // per-step, reward for surviving near the edge
+  ```
+- [ ] `Assets/Scripts/RLAgentBrain.cs` — wire each channel:
+  - `ringOutWinBonus`: in `RegisterWin()` add `personality.ringOutWinBonus` (every
+    `RegisterWin` IS a ring-out — timeouts never call it).
+  - `staminaSavingReward`: in `RegisterWin()` add
+    `staminaSavingReward * (myPlayer.currentStamina / myPlayer.stats.maxStamina)`.
+  - `comboReward`: track `int stepsSinceDodge` — reset to 0 when a dodge is issued,
+    increment each `FixedUpdate`. In `AddLandPushReward()`, if
+    `stepsSinceDodge < personality.comboWindowSteps` also add `personality.comboReward`.
+  - `centerControlMultiplier`: in `FixedUpdate`, add `(1 - selfDist/radius) * centerControlMultiplier`.
+  - `edgeBaitMultiplier`: in `FixedUpdate`, add `(selfDist/radius) * edgeBaitMultiplier`.
+  - `dodgeEvasionReward`: add an `AddDodgeEvasionReward()` method. In `PlayerPushingState`
+    (where a push resolves its hit), when the target is in `Dodging` state and so takes
+    no hit, call `(target.Brain as RLAgentBrain)?.AddDodgeEvasionReward()`.
 
-**Personality designs:**
-- **Aggressive** — high `landPushHit`, high `edgePressure`, strong `timePenalty`. Fast, relentless.
-- **Defensive** — high `successfulBlock`, low `takePushHit` penalty, `centerControl` +
-  `staminaSaving` rewards, ~zero `timePenalty`. Patient wall.
-- **Rusher** — huge `landPushHit`, ~zero `takePushHit` penalty (reckless), strong
-  `timePenalty`, penalty for blocking. All-in.
-- **Balanced** — even values, mild everything.
-- **Trickster** (new) — high `dodgeEvasion` + `combo` rewards, `edgeBait` reward. Baits and punishes.
+**Task 3b — Author the 5 personality assets** (`Assets/ScriptableObjects/Personalities/`).
+Starting values — tune after the 3d eval:
 
-Process: train each personality as a short specialist run (2-3M steps,
-`--initialize-from` the Phase 1 master). Evaluate round-robin in Bot vs Bot. A playstyle
-"works" if it (a) wins games and (b) is visibly distinct on screen.
+| Field | Aggressive | Defensive | Rusher | Balanced | Trickster |
+|---|---|---|---|---|---|
+| winRound | 1.5 | 1.5 | 1.5 | 1.5 | 1.5 |
+| loseRound | -1.5 | -1.0 | -2.0 | -1.5 | -1.5 |
+| landPushHit | 0.25 | 0.10 | 0.40 | 0.20 | 0.15 |
+| takePushHit | -0.20 | -0.05 | -0.02 | -0.15 | -0.20 |
+| successfulBlock | 0.05 | 0.20 | 0.00 | 0.08 | 0.05 |
+| pushBlocked | -0.05 | -0.05 | -0.10 | -0.05 | -0.05 |
+| facingOpponentMultiplier | 0.0001 | 0.0001 | 0.0001 | 0.0001 | 0.0001 |
+| opponentEdgePressureMultiplier | 0.0004 | 0.0002 | 0.0005 | 0.0003 | 0.0003 |
+| timePenaltyPerStep | -0.0001 | 0.0 | -0.0002 | -0.0001 | -0.00005 |
+| wastedStaminaMultiplier | -0.05 | -0.02 | -0.01 | -0.04 | -0.05 |
+| ringOutWinBonus | 0.30 | 0.20 | 0.50 | 0.30 | 0.30 |
+| dodgeEvasionReward | 0.05 | 0.05 | 0.00 | 0.05 | 0.20 |
+| comboReward | 0.10 | 0.00 | 0.05 | 0.10 | 0.30 |
+| centerControlMultiplier | 0.0 | 0.0003 | 0.0 | 0.0001 | 0.0 |
+| staminaSavingReward | 0.0 | 0.30 | 0.0 | 0.10 | 0.10 |
+| edgeBaitMultiplier | 0.0 | 0.0 | 0.0 | 0.0 | 0.0002 |
+
+Intent: Aggressive = relentless pressure · Defensive = patient blocking wall · Rusher =
+reckless all-in · Balanced = well-rounded · Trickster = dodge-bait-punish.
+
+**Task 3c — Train specialists.**
+- [ ] For each non-Aggressive personality, train ~2-3M steps warm-started from the
+  Phase 2 master: `--init-from=Pushman_Master_v1` (they specialize, not relearn basics).
+  Swap the wired `BotPersonality` asset before building the training scene, or add a
+  personality parameter to the `Pushman/3` builder.
+- [ ] Export each ONNX → `Assets/MLModels/[Personality]_Default/PushmanAgent.onnx`.
+
+**Task 3d — Evaluate.**
+- [ ] Round-robin in `Pushman/5` (swap each player's ONNX + `BotPersonality`).
+- [ ] A personality passes if it (a) wins a fair share AND (b) is visibly distinct on
+  screen. Re-tune the 3b table and retrain any that fail.
 
 ---
 
 ### Phase 4 — Visual & gameplay polish
 
-**Sound** — new `Assets/Audio/`, simple `AudioSource` triggers: charge-up whine, push
-fire, hit impact, block clang, dodge whoosh, ring-out, round win/lose.
+Goal: the game feels responsive and readable. Independent of the ML work — can run in
+parallel, e.g. between long training runs.
 
-**Effects:**
-- hit impact flash + particle burst
-- charge-up glow ramp scaled to charge level
-- dodge motion trail
-- ring-out splash (on top of the existing boundary flash)
-- screen shake on full-charge hits + brief hitstop (freeze-frame) on big impacts
+**Task 4a — Audio.**
+- [ ] Create `Assets/Audio/`. Source 7 short SFX (free packs or synthesized):
+  `charge`, `push`, `hit`, `block`, `dodge`, `ringout`, `roundwin`.
+- [ ] Add `Assets/Scripts/PlayerAudio.cs` — `AudioSource` + one `AudioClip` field per event.
+- [ ] Trigger points:
+  - `PlayerChargingState.EnterState` → charge
+  - `PlayerPushingState` on fire → push; on landed hit → hit
+  - `PlayerBlockingState` on a blocked push → block
+  - `PlayerDodgingState.EnterState` → dodge
+  - `ArenaManager.RingOutSequence` → ringout + roundwin
+- [ ] Wire `PlayerAudio` into the player prefab via `PushmanSetup` step 4.
 
-**Visuals:**
-- arena floor texture / grid so motion reads better
-- charge indicator ring around the player
-- shrink-ring warning pulse when the ring starts closing
-- clearer directional facing on player sprites
+**Task 4b — Hit & action effects.**
+- [ ] Hit flash: on take-hit, flash the body `SpriteRenderer` white ~0.1 s (coroutine in
+  `PlayerVisuals.cs`).
+- [ ] Hit particle burst: a small `ParticleSystem` prefab spawned at the contact point
+  on a landed push.
+- [ ] Charge glow ramp: `PlayerVisuals` already tints white while charging — scale glow
+  intensity with charge fraction (0→1 over `pushChargeTime`).
+- [ ] Dodge trail: add a `TrailRenderer` to the player, enabled only during `Dodging`.
+- [ ] Screen shake: `Assets/Scripts/CameraShake.cs` on the main camera with
+  `Shake(duration, magnitude)`; call from a landed push, magnitude scaled by charge.
+- [ ] Hitstop: on a full-charge hit, drop `Time.timeScale` to ~0.05 for ~0.05 s realtime,
+  then restore.
 
-**Gameplay feel:**
-- lower `timeUntilShrink` 30s → ~12s (flagged as too long in Section 0)
-- knockback feedback scaling; validate push-on-release feel
-- ring-shrink audio + visual telegraph
+**Task 4c — Arena & HUD visuals.**
+- [ ] Arena floor: a subtle textured/gridded sprite under the ring so motion reads.
+- [ ] Charge indicator: a child ring `SpriteRenderer` that fills as the push charges.
+- [ ] Shrink warning: pulse the `ArenaBoundary` color when the ring starts closing.
+- [ ] Clearer directional facing on the player sprite.
+
+**Task 4d — Gameplay feel.**
+- [ ] Lower `ArenaManager.timeUntilShrink` 30 s → 12 s (update the Arena prefab default).
+- [ ] Validate push-on-release feel and stamina costs in playtests (Section 0 ❓ items).
+- [ ] Ring-shrink telegraph: combine the 4c boundary pulse with an audio cue.
+
+---
+
+### Suggested execution order
+
+1. **Phase 1** — highest ROI, smallest change, fixes the root cause. Do first.
+2. **Phase 2d** (stat observations) — do before 2c/2e: it changes the obs space and
+   forces a fresh run anyway, so batch all obs-space work together.
+3. **Phase 2a/2b/2c/2e** — `train.sh` flag, self-play, curriculum scene, master retrain.
+4. **Phase 3** — specialists warm-started from the Phase 2 master; then Phase 2f.
+5. **Phase 4** — parallelisable; pick up between long training runs.
