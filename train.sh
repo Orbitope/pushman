@@ -1,10 +1,11 @@
 #!/bin/bash
 # Pushman training launcher
 # Usage:
-#   ./train.sh                          # fast experiment, editor mode
+#   ./train.sh                                              # fast experiment, editor mode
 #   ./train.sh --config=ppo_discrete_baseline --id=Pushman_v1
-#   ./train.sh --standalone             # use builds/Pushman_Training binary
-#   ./train.sh --resume                 # resume from last checkpoint
+#   ./train.sh --standalone                                 # use builds/Pushman_Training binary
+#   ./train.sh --resume                                     # resume from last checkpoint
+#   ./train.sh --init-from=Pushman_Bot_v2                   # warm-start weights from prior run
 #   ./train.sh --config=ppo_selfplay --id=Pushman_SelfPlay_v1 --standalone
 
 set -e
@@ -14,15 +15,17 @@ CONFIG="ppo_fast_experiment"
 RUN_ID="Pushman_Fast_v1"
 STANDALONE=false
 RESUME=false
+INIT_FROM=""
 EXTRA_ARGS=""
 
 for arg in "$@"; do
   case $arg in
-    --config=*)  CONFIG="${arg#*=}" ;;
-    --id=*)      RUN_ID="${arg#*=}" ;;
-    --standalone) STANDALONE=true ;;
-    --resume)    RESUME=true ;;
-    --force)     EXTRA_ARGS="$EXTRA_ARGS --force" ;;
+    --config=*)    CONFIG="${arg#*=}" ;;
+    --id=*)        RUN_ID="${arg#*=}" ;;
+    --standalone)  STANDALONE=true ;;
+    --resume)      RESUME=true ;;
+    --init-from=*) INIT_FROM="${arg#*=}" ;;
+    --force)       EXTRA_ARGS="$EXTRA_ARGS --force" ;;
   esac
 done
 
@@ -60,6 +63,11 @@ if $RESUME; then
   echo "[train.sh] Resuming from existing checkpoint."
 else
   CMD="$CMD --force"
+fi
+
+if [ -n "$INIT_FROM" ]; then
+  CMD="$CMD --initialize-from=${INIT_FROM}"
+  echo "[train.sh] Warm-starting weights from run: $INIT_FROM"
 fi
 
 CMD="$CMD $EXTRA_ARGS"
