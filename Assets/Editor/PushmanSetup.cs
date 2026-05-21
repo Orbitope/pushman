@@ -481,6 +481,22 @@ public static class PushmanSetup
         fillRT.offsetMin = new Vector2(2f, 2f);
         fillRT.offsetMax = new Vector2(-2f, -2f);
         var fillImg = fillGO.AddComponent<Image>();
+        // Image.Type.Filled requires a sprite — without one fillAmount is ignored
+        // and it just renders a solid color at full size regardless of stamina.
+        var barSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/StaminaBar.png");
+        if (barSprite == null)   // create it if first run
+        {
+            var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var px  = new Color[16]; for (int i = 0; i < 16; i++) px[i] = Color.white;
+            tex.SetPixels(px); tex.Apply();
+            File.WriteAllBytes("Assets/Sprites/StaminaBar.png", tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset("Assets/Sprites/StaminaBar.png");
+            var imp = AssetImporter.GetAtPath("Assets/Sprites/StaminaBar.png") as TextureImporter;
+            if (imp != null) { imp.textureType = TextureImporterType.Sprite; imp.spriteImportMode = SpriteImportMode.Single; AssetDatabase.ImportAsset("Assets/Sprites/StaminaBar.png", ImportAssetOptions.ForceUpdate); }
+            barSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/StaminaBar.png");
+        }
+        fillImg.sprite     = barSprite;
         fillImg.color      = fillColor;
         fillImg.type       = Image.Type.Filled;
         fillImg.fillMethod = Image.FillMethod.Horizontal;
