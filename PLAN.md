@@ -30,7 +30,7 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
   - `ChaseBotBrain` — walks slowly, random push/block
   - `DodgingBotBrain` — dodges toward player every 5s
 
-### Post-Implementation Fixes (2026-05-20)
+### Post-Implementation Fixes (2026-05-20) — Session 1
 - ✅ **RLAgentBrain Input System** — Fixed `Heuristic()` using legacy `Input.GetButton/GetAxisRaw`
   - Replaced with `Keyboard.current` / `Mouse.current` (new Input System)
   - Resolved: "InvalidOperationException: You are trying to read Input using UnityEngine.Input class" in RLAgentBrain.Heuristic
@@ -51,6 +51,12 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
 - ✅ **Prefabs updated** — Re-ran `Pushman/2. Save Prefabs` after sprite setup
 
 ---
+
+### Post-Implementation Fixes (2026-05-20) — Session 2
+- ✅ **Screen-space HUD** — replaced world-space stamina bars with overlay canvas (see Section 8D)
+- ✅ **Stamina rebalance** — dodge 40, push 20→40 charge-scaled, regen Moving-only (see Section 8D)
+- ✅ **HumanBrain Input System fix** — added `Update()` to re-acquire `Keyboard.current`/`Mouse.current` if null at OnEnable time
+- ✅ **PushmanSetup editor robustness** — reflection-based StaminaHUD instantiation, file-exists check before asset cache lookup, stale bar child cleanup
 
 ### Phase 1 — Logic & State Machine Fixes: ✅ COMPLETE
 - ✅ `CharacterStats.cs` ScriptableObject created; `Player.cs` fully migrated (`stats` reference, `rb.mass = stats.weight`)
@@ -82,15 +88,25 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
 - Note: Physics 2D layer-per-arena not feasible (only 32 layers). Arenas isolated by spacing — players ring out before reaching neighbours.
 
 ### Section 8D — Visual Feedback: ✅ COMPLETE
-- ✅ World-space Canvas with green stamina bar (Slider) — positioned 1.2u above player head
+- ✅ **Screen-space stamina HUD** — `StaminaHUD.cs` Screen Space Overlay canvas
+  - P1 green bar bottom-left, P2 red bar bottom-right (300×28px, 20px margin)
+  - `Image.Type.Filled` horizontal fill — no scale tricks, no world-space issues
+  - Orange-red tint flash when stamina < 25%
+  - Auto-discovers `Arena/Player1` and `Arena/Player2` by name if not inspector-wired
+  - `PushmanSetup` creates + wires HUD via reflection (avoids editor compile dependency)
+  - Old world-space SpriteRenderer bars removed; `PushmanSetup/4` cleans up stale children
 - ✅ `SpriteRenderer.color` state indicators:
   - **Stunned** → Gray flash (visual stagger effect)
   - **Charging** → White glow (full brightness, shows readiness)
+  - **Dodging** → Blue tint
   - **Low Stamina** (< 20%) → Red tint (warning indicator)
   - **Normal** → Base color with smooth transition
-- ✅ `Player.cs` updated with `UpdateUI()` and `UpdateStateColor()` methods
-- ✅ `PushmanSetup.cs` extended with "4. Add UI to Player Prefab" menu item
-- ✅ Prefabs updated with stamina slider wired to Player component
+- ✅ **Stamina rebalance** (2026-05-20)
+  - Dodge cost: 20 → **40** (~40% of pool per dash)
+  - Push cost: flat 20 → **20–40 scaled by charge** (`pushStamina * (1 + chargeNorm)`)
+  - Block drain: 15/s (unchanged)
+  - Regen: 8/s, **Moving state only** — must disengage to recover
+  - All values synced between `DefaultStats.asset` and `InitCharacterStats()`
 
 ---
 
