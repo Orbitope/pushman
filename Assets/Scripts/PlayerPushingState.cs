@@ -1,45 +1,31 @@
 using UnityEngine;
 
+// Transient state: resolves the push on Enter, then ExecutePush stuns the player
+// (recovery or stagger), which transitions out of this state.
 public class PlayerPushingState : PlayerStateBase
 {
-    private float pushStartTime;
-    public float chargeTime { get; private set; } 
-
     public override void BeginState()
     {
-        pushStartTime = Time.time;
-        chargeTime = 0f;
-        player.animator?.SetTrigger("Push"); 
-    }
+        float chargeNorm = player.stats.pushChargeTime > 0f
+            ? player.chargingStateScript.currentChargeTime / player.stats.pushChargeTime
+            : 0f;
 
-    public override void UpdateState()
-    {
-        chargeTime = Mathf.Min(player.pushChargeTime, Time.time - pushStartTime);
+        // Stamina cost scales with charge: base cost at tap, up to 2× at full charge.
+        float staminaCost = player.stats.pushStamina * (1f + chargeNorm);
 
-        if(chargeTime >= player.pushChargeTime || !player.Brain.GetPushInput())
+        if (!player.CanUseStamina(staminaCost))
         {
-            Push();
-        }
-    }
-
-    private void Push()
-    {
-        float pushStrength = player.pushForce + (player.pushForce * player.pushChargeMultiplier * (chargeTime / player.pushChargeTime));
-        Vector2 pushDirection = player.transform.up; 
-
-        if (player.CanUseStamina(player.pushStamina))
-        {
-            player.UseStamina(player.pushStamina);
-            player.ApplyForce(pushDirection * pushStrength);
-            player.Stun(0.2f); 
-        }
-        else if (player.Brain is RLAgentBrain rlBrain)
-        {
-            rlBrain.AddWastedStaminaPenalty(player.pushStamina);
+            (player.Brain as RLAgentBrain)?.AddWastedStaminaPenalty(staminaCost);
+            player.SetState(Player.PlayerState.Moving);
+            return;
         }
 
-        player.SetState(Player.PlayerState.Moving);
+        player.UseStamina(staminaCost);
+        if (player.animator != null) player.animator.SetTrigger("Push");
+        player.ExecutePush(chargeNorm);
     }
+
+    public override void UpdateState() { }
 
     public override void EndState() { }
 }

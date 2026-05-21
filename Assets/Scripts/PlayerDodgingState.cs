@@ -3,37 +3,40 @@ using UnityEngine;
 public class PlayerDodgingState : PlayerStateBase
 {
     private float dodgeEndTime;
-    private Vector2 dodgeDirection;
+    private float savedDamping;
 
     public override void BeginState()
     {
-        if (player.CanUseStamina(player.dodgeStamina))
+        if (!player.CanUseStamina(player.stats.dodgeStamina))
         {
-            player.UseStamina(player.dodgeStamina);
-            dodgeDirection = player.Brain.GetMovement();
-            
-            if (dodgeDirection == Vector2.zero) dodgeDirection = player.transform.up; 
-            
-            player.SetVelocity(dodgeDirection * player.dodgeForce); 
-            dodgeEndTime = Time.time + player.dodgeTime;
-            player.animator?.SetTrigger("Dodge"); 
+            player.SetState(Player.PlayerState.Moving);
+            return;
         }
-        else
-        {
-             player.SetState(Player.PlayerState.Moving); 
-        }
+
+        player.UseStamina(player.stats.dodgeStamina);
+
+        // Kill damping for the duration of the dash so the force isn't eaten by drag.
+        // At damping=2 a force-10 dash only travels ~2 units; with damping=0 it travels the full arc.
+        savedDamping = player.Body.linearDamping;
+        player.Body.linearDamping = 0f;
+
+        Vector2 dir = player.Brain.GetMovement();
+        if (dir == Vector2.zero) dir = player.transform.up;
+
+        player.SetVelocity(dir.normalized * player.stats.dodgeForce);
+        dodgeEndTime = Time.time + player.stats.dodgeTime;
+        if (player.animator != null) player.animator.SetTrigger("Dodge");
     }
 
     public override void UpdateState()
     {
-        if (Time.time > dodgeEndTime)
-        {
+        if (Time.time >= dodgeEndTime)
             player.SetState(Player.PlayerState.Moving);
-        }
     }
 
     public override void EndState()
     {
-       player.SetVelocity(Vector2.zero); 
+        player.Body.linearDamping = savedDamping;
+        player.SetVelocity(Vector2.zero);
     }
 }

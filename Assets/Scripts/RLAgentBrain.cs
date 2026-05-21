@@ -1,35 +1,44 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 
 public class RLAgentBrain : Agent, IPlayerBrain
 {
+    public enum ActionSpaceMode { Discrete, Continuous }
+
+    [Header("Action Space")]
+    public ActionSpaceMode actionSpaceMode = ActionSpaceMode.Discrete;
+
     [Header("Agent References")]
     private Player myPlayer;
-    public Transform arenaCenter; 
-    public float arenaRadius = 10f; 
+    public ArenaManager arenaManager;
 
     [Header("Opponents")]
-    public Player[] opponents; 
+    public Player[] opponents;
 
     [Header("Reward Configuration")]
     public BotPersonality personality;
 
-    [Header("Observation Configuration")]
-    public bool obsSelfKinematics = true; 
-    public bool obsSelfStamina = true; 
-    public bool obsArenaBounds = true; 
-    
-    [Header("Opponent Observations")]
-    public bool obsOpponentPosition = true; 
-    public bool obsOpponentVelocity = true; 
-    public bool obsOpponentState = true; 
+    [Header("Observation Profile")]
+    [Tooltip("Swap this asset to change what the agent can see. Null = Profile A defaults (all on).")]
+    public ObservationProfile observationProfile;
 
     private Vector2 currentMovement;
-    private bool isPushing;
-    private bool isBlocking;
-    private bool isDodging;
+    private float currentRotation;
+    private int actionButton; // 0 none, 1 push, 2 block, 3 dodge
+
+    // Cached from ObservationProfile; falls back to all-true if profile is null.
+    private bool SelfKinematics => observationProfile == null || observationProfile.selfKinematics;
+    private bool SelfStamina => observationProfile == null || observationProfile.selfStamina;
+    private bool SelfState => observationProfile == null || observationProfile.selfState;
+    private bool ArenaBounds => observationProfile == null || observationProfile.arenaBounds;
+    private bool OppPosition => observationProfile == null || observationProfile.opponentPosition;
+    private bool OppVelocity => observationProfile == null || observationProfile.opponentVelocity;
+    private bool OppState => observationProfile == null || observationProfile.opponentState;
+    private bool UseFOV => observationProfile != null && observationProfile.useFOV;
+    private float FOVAngle => observationProfile != null ? observationProfile.fieldOfViewAngle : 120f;
 
     public override void Initialize()
     {
@@ -38,116 +47,190 @@ public class RLAgentBrain : Agent, IPlayerBrain
 
     private void FixedUpdate()
     {
-        if (personality == null) return;
+        if (personality == null || arenaManager == null) return;
 
-        if (personality.centerControlMultiplier != 0 && arenaCenter != null)
-        {
-            float distanceToCenter = Vector2.Distance(transform.position, arenaCenter.position);
-            float centerScore = 1f - Mathf.Clamp01(distanceToCenter / arenaRadius);
-            AddReward(centerScore * personality.centerControlMultiplier);
-        }
+        // Time pressure: constant per-step penalty so agents prefer shorter matches.
+        if (personality.timePenaltyPerStep != 0)
+            AddReward(personality.timePenaltyPerStep);
 
-        if (personality.facingOpponentMultiplier != 0 && opponents.Length > 0 && opponents[0] != null)
+        if (opponents.Length > 0 && opponents[0] != null)
         {
-            Vector2 directionToOpponent = (opponents[0].transform.position - transform.position).normalized;
-            float facingScore = Vector2.Dot(transform.up, directionToOpponent);
-            if (facingScore > 0.5f) 
+            // Mild reward for facing the opponent — encourages engagement over spinning in place.
+            if (personality.facingOpponentMultiplier != 0)
             {
-                AddReward(facingScore * personality.facingOpponentMultiplier);
+                Vector2 dir = (opponents[0].transform.position - transform.position).normalized;
+                float dot = Vector2.Dot(transform.up, dir);
+                if (dot > 0.5f) AddReward(dot * personality.facingOpponentMultiplier);
+            }
+
+            // Reward for pressuring the opponent toward the ring edge.
+            // This replaces center-control: instead of rewarding where WE are,
+            // reward how close THEY are to the boundary.
+            if (personality.opponentEdgePressureMultiplier != 0 && arenaManager != null)
+            {
+                float oppDist = Vector2.Distance(opponents[0].transform.position,
+                                                 arenaManager.arenaCenter.position);
+                float edgePressure = Mathf.Clamp01(oppDist / arenaManager.CurrentRingRadius);
+                AddReward(edgePressure * personality.opponentEdgePressureMultiplier);
             }
         }
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        if (obsSelfKinematics)
+        if (myPlayer == null) return;
+
+        float radius = arenaManager != null ? arenaManager.CurrentRingRadius : 1f;
+        Transform center = arenaManager != null ? arenaManager.arenaCenter : null;
+
+        if (SelfKinematics)
         {
-            Vector2 normVelocity = myPlayer.GetComponent<Rigidbody2D>().linearVelocity / myPlayer.movementSpeed;
-            sensor.AddObservation(normVelocity.x);
-            sensor.AddObservation(normVelocity.y);
-            float normRotation = (transform.eulerAngles.z / 180f) - 1f;
-            sensor.AddObservation(normRotation);
+            Vector2 normVel = myPlayer.Body.linearVelocity / myPlayer.stats.movementSpeed;
+            sensor.AddObservation(normVel.x);
+            sensor.AddObservation(normVel.y);
+            sensor.AddObservation((transform.eulerAngles.z / 180f) - 1f);
         }
 
-        if (obsSelfStamina) sensor.AddObservation(myPlayer.currentStamina / myPlayer.maxStamina);
+        if (SelfStamina) sensor.AddObservation(myPlayer.currentStamina / myPlayer.stats.maxStamina);
+        if (SelfState) sensor.AddObservation((float)myPlayer.currentState / 5f);
 
-        if (obsArenaBounds && arenaCenter != null)
+        if (ArenaBounds && center != null)
         {
-            Vector2 toCenter = (Vector2)(arenaCenter.position - transform.position);
-            sensor.AddObservation(toCenter.x / arenaRadius);
-            sensor.AddObservation(toCenter.y / arenaRadius);
+            Vector2 toCenter = (Vector2)(center.position - transform.position);
+            sensor.AddObservation(toCenter.x / radius);
+            sensor.AddObservation(toCenter.y / radius);
+            sensor.AddObservation(radius / arenaManager.ringOutRadius); // normalized shrink progress
         }
 
         foreach (var opp in opponents)
         {
-            if (opp == null) continue;
-
-            if (obsOpponentPosition)
+            if (opp == null)
             {
-                Vector2 relativePos = (Vector2)(opp.transform.position - transform.position);
-                sensor.AddObservation(relativePos.x / (arenaRadius * 2));
-                sensor.AddObservation(relativePos.y / (arenaRadius * 2));
+                // Pad missing opponents with zeros so space size is fixed.
+                int pad = (OppPosition ? 2 : 0) + (OppVelocity ? 2 : 0) + (OppState ? 1 : 0);
+                for (int i = 0; i < pad; i++) sensor.AddObservation(0f);
+                continue;
             }
 
-            if (obsOpponentVelocity)
+            bool visible = true;
+            if (UseFOV)
             {
-                Vector2 relativeVel = opp.GetComponent<Rigidbody2D>().linearVelocity / opp.movementSpeed;
-                sensor.AddObservation(relativeVel.x);
-                sensor.AddObservation(relativeVel.y);
+                Vector2 toOpp = (opp.transform.position - transform.position).normalized;
+                float angle = Vector2.Angle(transform.up, toOpp);
+                visible = angle <= FOVAngle * 0.5f;
             }
 
-            if (obsOpponentState) sensor.AddObservation((float)opp.currentState / 5f);
+            if (OppPosition)
+            {
+                if (visible)
+                {
+                    Vector2 rel = (Vector2)(opp.transform.position - transform.position);
+                    sensor.AddObservation(rel.x / (radius * 2));
+                    sensor.AddObservation(rel.y / (radius * 2));
+                }
+                else { sensor.AddObservation(0f); sensor.AddObservation(0f); }
+            }
+
+            if (OppVelocity)
+            {
+                if (visible)
+                {
+                    Vector2 relVel = opp.Body.linearVelocity / opp.stats.movementSpeed;
+                    sensor.AddObservation(relVel.x);
+                    sensor.AddObservation(relVel.y);
+                }
+                else { sensor.AddObservation(0f); sensor.AddObservation(0f); }
+            }
+
+            if (OppState) sensor.AddObservation(visible ? (float)opp.currentState / 5f : 0f);
         }
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        currentMovement.x = actions.ContinuousActions[0];
-        currentMovement.y = actions.ContinuousActions[1];
-        isPushing = actions.DiscreteActions[0] == 1;
-        isBlocking = actions.DiscreteActions[1] == 1;
-        isDodging = actions.DiscreteActions[2] == 1;
+        if (actionSpaceMode == ActionSpaceMode.Discrete)
+        {
+            currentMovement.x = DiscreteToAxis(actions.DiscreteActions[0]);
+            currentMovement.y = DiscreteToAxis(actions.DiscreteActions[1]);
+            currentRotation = DiscreteToAxis(actions.DiscreteActions[2]);
+            actionButton = actions.DiscreteActions[3];
+        }
+        else
+        {
+            currentMovement.x = actions.ContinuousActions[0];
+            currentMovement.y = actions.ContinuousActions[1];
+            currentRotation = Mathf.Clamp(actions.ContinuousActions[2], -1f, 1f);
+            actionButton = actions.DiscreteActions[0];
+        }
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        var continuousActionsOut = actionsOut.ContinuousActions;
-        continuousActionsOut[0] = Input.GetAxisRaw("Horizontal");
-        continuousActionsOut[1] = Input.GetAxisRaw("Vertical");
+        var keyboard = Keyboard.current;
+        var mouse    = Mouse.current;
 
-        var discreteActionsOut = actionsOut.DiscreteActions;
-        discreteActionsOut[0] = Input.GetButton("Fire1") ? 1 : 0;
-        discreteActionsOut[1] = Input.GetButton("Fire2") ? 1 : 0;
-        discreteActionsOut[2] = Input.GetButtonDown("Jump") ? 1 : 0;
+        float h = 0f, v = 0f;
+        if (keyboard != null)
+        {
+            if (keyboard.aKey.isPressed) h -= 1f;
+            if (keyboard.dKey.isPressed) h += 1f;
+            if (keyboard.sKey.isPressed) v -= 1f;
+            if (keyboard.wKey.isPressed) v += 1f;
+        }
+
+        bool fire1 = mouse != null && mouse.leftButton.isPressed;
+        bool fire2 = mouse != null && mouse.rightButton.isPressed;
+        bool jump  = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+
+        int button = fire1 ? 1 : fire2 ? 2 : jump ? 3 : 0;
+
+        if (actionSpaceMode == ActionSpaceMode.Discrete)
+        {
+            var d = actionsOut.DiscreteActions;
+            d[0] = AxisToDiscrete(h);
+            d[1] = AxisToDiscrete(v);
+            d[2] = 0;
+            d[3] = button;
+        }
+        else
+        {
+            var c = actionsOut.ContinuousActions;
+            c[0] = h;
+            c[1] = v;
+            c[2] = 0f;
+            actionsOut.DiscreteActions.Array[actionsOut.DiscreteActions.Offset] = button;
+        }
     }
+
+    private static float DiscreteToAxis(int v) => v == 1 ? -1f : v == 2 ? 1f : 0f;
+    private static int AxisToDiscrete(float v) => v < -0.5f ? 1 : v > 0.5f ? 2 : 0;
 
     private void OnValidate()
     {
-        int totalObs = 0;
-        if (obsSelfKinematics) totalObs += 3;
-        if (obsSelfStamina) totalObs += 1;
-        if (obsArenaBounds) totalObs += 2;
-        int oppObs = 0;
-        if (obsOpponentPosition) oppObs += 2;
-        if (obsOpponentVelocity) oppObs += 2;
-        if (obsOpponentState) oppObs += 1;
         int oppCount = opponents != null ? opponents.Length : 0;
-        totalObs += (oppObs * oppCount);
-        Debug.Log($"[{gameObject.name}] Required ML-Agents Space Size: {totalObs}");
+        int spaceSize = observationProfile != null
+            ? observationProfile.ComputeSpaceSize(oppCount)
+            : ComputeDefaultSpaceSize(oppCount);
+        Debug.Log($"[{gameObject.name}] Observation Space Size: {spaceSize} | Opponents: {oppCount} | Mode: {actionSpaceMode}");
     }
+
+    // Profile A defaults: selfKin(3)+selfStam(1)+selfState(1)+arena(3) + per-opp(5)
+    private static int ComputeDefaultSpaceSize(int oppCount) => 8 + oppCount * 5;
+
+    // ArenaManager calls these; EndEpisode is called separately by ArenaManager to keep ordering explicit.
+    public void RegisterWin() { if (personality) AddReward(personality.winRound); }
+    public void RegisterLoss() { if (personality) AddReward(personality.loseRound); }
 
     public void AddLandPushReward() { if (personality) AddReward(personality.landPushHit); }
     public void AddTakeHitReward() { if (personality) AddReward(personality.takePushHit); }
     public void AddSuccessfulBlockReward() { if (personality) AddReward(personality.successfulBlock); }
     public void AddPushBlockedReward() { if (personality) AddReward(personality.pushBlocked); }
     public void AddWastedStaminaPenalty(float amount) { if (personality) AddReward(amount * personality.wastedStaminaMultiplier); }
-    
-    public void RegisterWin() { if (personality) AddReward(personality.winRound); EndEpisode(); }
-    public void RegisterLoss() { if (personality) AddReward(personality.loseRound); EndEpisode(); }
 
-    public Vector2 GetMovement() => currentMovement.normalized;
-    public bool GetPushInput() => isPushing;
-    public bool GetBlockInput() => isBlocking;
-    public bool GetDodgeInput() => isDodging;
-    public bool GetSpecialInput() => false; 
+    public Vector2 GetMovement() => Vector2.ClampMagnitude(currentMovement, 1f);
+    public float GetRotationInput() => currentRotation;
+    public bool GetPushInput() => actionButton == 1;
+    public bool GetBlockInput() => actionButton == 2;
+    public bool GetDodgeInput() => actionButton == 3;
+    public bool GetSpecialInput() => false;
 }

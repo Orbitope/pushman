@@ -2,30 +2,32 @@ using UnityEngine;
 
 public class PlayerChargingState : PlayerStateBase
 {
+    // Read by PlayerPushingState on Enter to scale push strength.
+    public float currentChargeTime { get; private set; }
+
     public override void BeginState()
     {
-        player.animator?.SetBool("IsCharging", true); 
+        currentChargeTime = 0f;
+        if (player.animator != null) player.animator.SetBool("IsCharging", true);
     }
 
     public override void UpdateState()
     {
-        Vector2 moveDirection = player.Brain.GetMovement();
-        player.ApplyForce(moveDirection * player.movementSpeed * 0.5f); 
+        currentChargeTime = Mathf.Min(player.stats.pushChargeTime, currentChargeTime + Time.deltaTime);
 
-        if (moveDirection != Vector2.zero)
-        {
-            float angle = Mathf.Atan2(moveDirection.y, moveDirection.x) * Mathf.Rad2Deg - 90f;
-            player.transform.rotation = Quaternion.Euler(0, 0, angle);
-        }
+        Vector2 move = player.Brain.GetMovement();
+        player.SetVelocity(move * player.stats.movementSpeed * 0.5f);
+
+        float rot = player.Brain.GetRotationInput();
+        if (rot != 0f)
+            player.transform.Rotate(0f, 0f, -rot * 360f * Time.deltaTime);
 
         if (!player.Brain.GetPushInput())
-        {
             player.SetState(Player.PlayerState.Pushing);
-        }
     }
 
     public override void EndState()
     {
-        player.animator?.SetBool("IsCharging", false); 
+        if (player.animator != null) player.animator.SetBool("IsCharging", false);
     }
 }

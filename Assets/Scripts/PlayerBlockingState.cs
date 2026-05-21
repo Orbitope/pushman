@@ -4,31 +4,35 @@ public class PlayerBlockingState : PlayerStateBase
 {
     public override void BeginState()
     {
-        player.animator?.SetBool("IsBlocking", true); 
+        if (player.animator != null) player.animator.SetBool("IsBlocking", true);
     }
 
     public override void UpdateState()
     {
         if (!player.Brain.GetBlockInput())
         {
-            player.SetState(Player.PlayerState.Moving); 
+            player.SetState(Player.PlayerState.Moving);
+            return;
         }
 
-        if (player.CanUseStamina(player.blockStaminaUsageRate * Time.deltaTime))
+        float cost = player.stats.blockStaminaUsageRate * Time.deltaTime;
+        if (!player.CanUseStamina(cost))
         {
-            player.UseStamina(player.blockStaminaUsageRate * Time.deltaTime);
+            player.SetState(Player.PlayerState.Moving);
+            return;
         }
-        else
-        {
-            player.SetState(Player.PlayerState.Moving); 
-        }
+        player.UseStamina(cost);
 
-        Vector2 moveDirection = player.Brain.GetMovement();
-        player.ApplyForce(moveDirection * player.movementSpeed * 0.25f); 
+        Vector2 move = player.Brain.GetMovement();
+        player.SetVelocity(move * player.stats.movementSpeed * 0.25f);
+
+        float rot = player.Brain.GetRotationInput();
+        if (rot != 0f)
+            player.transform.Rotate(0f, 0f, -rot * 360f * Time.deltaTime);
     }
 
     public override void EndState()
     {
-        player.animator?.SetBool("IsBlocking", false); 
+        if (player.animator != null) player.animator.SetBool("IsBlocking", false);
     }
 }
