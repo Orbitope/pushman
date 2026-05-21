@@ -126,7 +126,7 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
 - ❌ **Observation space size hard-coded at 13; will break if `ObservationProfile` changes** — if any flag in `Profile_A.asset` is toggled, actual collected observations diverge from `VectorObservationSize = 13`, causing a hard ML-Agents runtime error. Fix: call `observationProfile.ComputeSpaceSize()` when setting up `BehaviorParameters` rather than using `OBS_SIZE` constant.
 
 **Design ambiguities to confirm during play:**
-- ❓ **Dodge bypasses block** — `HandleDodgeCollision` doesn't check if the target is blocking. A dodge-tackle always stuns regardless of block stance. Possibly intentional (dodge = block-breaker) but undocumented. Decide and document.
+- ✅ **Dodge bypasses block** — intentional design. Dodge is the counter to block; a dodge-tackle always stuns regardless of block stance. Documented.
 - ❓ **Push fires on mouse RELEASE, not press** — holding left mouse charges, releasing fires the push. Correct fighting-game design but unintuitive for new players expecting click = push.
 
 ### Pending — Visual Polish
