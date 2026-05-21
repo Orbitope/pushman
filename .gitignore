@@ -101,3 +101,10 @@ venv-mlagents/
 
 # ML-Agents training output (checkpoints + tensorboard logs — can be large)
 /results/
+
+# ML-Agents per-run timing reports — folder is auto-generated each run, not worth tracking
+/[Aa]ssets/ML-Agents/
+/[Aa]ssets/ML-Agents.meta
+
+# macOS finder metadata
+.DS_Store

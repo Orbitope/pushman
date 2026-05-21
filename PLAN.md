@@ -81,17 +81,20 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 - ❓ Stamina costs — dodge 40%, push 20–40% — validate these feel fair in play.
 - ❓ Shrink timer (30s) — may be too long for short test sessions; lower to ~10s to test the mechanic.
 
-**ML-Agents training (pre-training done, ready to run)**
+**ML-Agents training**
 - ✅ Arena prefab fixed — `BehaviorType=Default`, `DecisionRequester` period=5
-- ✅ Training scenes — `ML_Training_Scene_Small` (4×4=16 arenas) + `ML_Training_Scene` (8×8=64)
+- ✅ Training scenes — `ML_Training_Scene_Small` (4×4=16) + `ML_Training_Scene` (8×8=64)
 - ✅ `venv-mlagents/` ready — Python 3.10.12, mlagents 1.1.0, torch 2.3.1, onnx 1.15.0, setuptools<81
-- ✅ `train.sh` — convenience script for editor and standalone modes
-- ✅ `.gitignore` — `results/` and `builds/` excluded
-- ✅ Standalone build — `builds/Pushman_Training/` (Server Build via Unity 6 Build Profiles → macOS Server); two fixes required (see Standalone Build Notes below)
-- 🔄 Fast sanity run — `Pushman_Fast_v1` running standalone; previously reached 80k steps editor-mode. Resume/restart with `./train.sh --standalone --force`
-- ❌ First full training run — `ppo_discrete_baseline.yaml` (~2-3h, run via `./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_v1`)
-- ❌ Self-play run — after baseline trained; `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1`
-- ✅ ONNX integration — `results/Pushman_Fast_v1/PushmanAgent.onnx` copied to `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`; `Pushman/5` builds a watch scene automatically
+- ✅ `train.sh`, `.gitignore`, standalone build — all working (see Standalone Build Notes below)
+- ✅ First standalone run — `Pushman_Fast_v1` trained to 1M steps, ONNX exported & integrated
+- ✅ ONNX integration — `Pushman/5` Bot vs Bot watch scene auto-loads the newest model
+- ⚠️ **v1 bots play weakly** — root-caused to a reward-scaling bug, NOT under-training. Full diagnosis + 4-phase fix roadmap in **Section 4**.
+
+**Next up → Section 4 "Model Iteration & Polish Roadmap"** (branch `feature/model-iteration`)
+- ❌ Phase 1 — retune rewards + LSTM baseline run (`Pushman_Bot_v2`)
+- ❌ Phase 2 — self-play + multi-opponent curriculum (one master network)
+- ❌ Phase 3 — reward shaping for distinct playstyles
+- ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
 
 **Standalone Build Notes (apply after every rebuild)**
 Two patches are required after building — they survive until the next rebuild:
@@ -144,7 +147,7 @@ Two patches are required after building — they survive until the next rebuild:
 ```bash
 source venv-mlagents/bin/activate
 ```
-Installed: mlagents 1.1.0 · torch 2.12.0 · onnx 1.15.0
+Installed: mlagents 1.1.0 · torch 2.3.1 · onnx 1.15.0
 
 **To recreate from scratch** (grpcio needs binary pre-install on macOS ARM):
 ```bash
@@ -209,3 +212,135 @@ source venv-mlagents/bin/activate && tensorboard --logdir results/
 - ✅ `VectorObservationSize = 13` (Profile_A, 1 opponent)
 - ✅ Incremental GC enabled in Project Settings
 - ✅ `results/` and `builds/` in .gitignore
+
+---
+
+## 4. Model Iteration & Polish Roadmap
+*Branch: `feature/model-iteration` — added 2026-05-21*
+
+### Diagnosis — why the v1 bots are weak
+
+`Pushman_Fast_v1` (1M steps) reached mean reward ~1.3 but plays poorly. The problem is
+**reward mis-scaling, not insufficient training:**
+
+- `facingOpponentMultiplier` on `Aggressive.asset` is `0.001` — 10× the value its own
+  tooltip recommends (`0.0001`).
+- Per-step facing reward over a full 5000-step episode: `0.001 × ~0.7 × 5000 ≈ 3.5` —
+  **3.5× the +1.0 win reward.**
+- Early in training (long episodes, nobody can ring-out yet) the dominant gradient is
+  "face the opponent and don't fall out." The policy settles into a face-and-survive
+  local optimum and never learns to push aggressively.
+- The fast config also had **no LSTM** (`use_recurrent: false`) and only 64 hidden units
+  — too little capacity to learn charge-up / block-break timing tells.
+
+**Rule going forward:** total per-step dense shaping over a full episode must stay well
+under the terminal win/loss magnitude (target ≈ ±0.5 dense vs ±1.5 terminal).
+
+---
+
+### Phase 1 — Optimize the master policy (current profiles/styles)
+
+Goal: a genuinely competent baseline bot on Profile A + Aggressive style.
+
+**1a. Reward retune** — edit `Aggressive.asset` and `BotPersonality.cs` defaults:
+
+| Field | Old | New | Reason |
+|---|---|---|---|
+| `facingOpponentMultiplier` | 0.001 | 0.0001 | kill the face-and-survive local optimum |
+| `landPushHit` | 0.1 | 0.2 | reward pushing more (user request) |
+| `takePushHit` | -0.1 | -0.2 | keep symmetric |
+| `opponentEdgePressureMultiplier` | 0.0002 | 0.0004 | reward ring-out pressure (user request) |
+| `timePenaltyPerStep` | -0.0002 | -0.0001 | -1.0/episode is too harsh; -0.5 still punishes stalling |
+| `winRound` | 1.0 | 1.5 | make the ring-out outcome dominate dense shaping |
+| `loseRound` | -1.0 | -1.5 | symmetric |
+
+**1b. Use the LSTM baseline config** — `ppo_discrete_baseline.yaml` already has
+`use_recurrent: true`, 128 hidden units, memory 128, 5M steps. ("Reimplement LSTM" =
+the config exists; the fast experiment just didn't use it.)
+
+**1c. Run** — reward assets changed ⇒ standalone rebuild required, then:
+```
+./train.sh --standalone --config=ppo_discrete_baseline --id=Pushman_Bot_v2
+```
+Watch TensorBoard: **episode length should fall** over training (faster ring-outs) and
+reward should rise on top of that — that combination means real learning, not stalling.
+
+**1d. Validate** — `Pushman/5` Bot vs Bot scene + human-vs-bot test scene.
+
+---
+
+### Phase 2 — Self-play + multi-opponent curriculum (one master network)
+
+Goal: one `PushmanAgent` network that beats varied opponents. Only the master trains;
+opponents are frozen or scripted.
+
+- **2a. Self-play** — `ppo_selfplay.yaml` already has the `self_play:` block (ELO,
+  snapshots). Run with `--initialize-from=Pushman_Bot_v2` so it starts from the Phase 1
+  policy, not random:
+  `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1`
+- **2b. Scripted-opponent curriculum** — expose the master to the hand-coded bots
+  (`ChaseBotBrain`, `StandingBotBrain`, `DodgingBotBrain`): free, varied, deterministic
+  opponents. New `Pushman/3c` menu item — mixed-opponent scene that randomizes the
+  master's opponent per episode.
+- **2c. Frozen-specialist opponents** — once Phase 3 specialists exist, drop their ONNX
+  into opponent slots as `InferenceOnly`. The master keeps training; specialists stay
+  static. This is how "train against different playstyles, only train the main one" works.
+- **2d. One-network-plays-any-character — CODE CHANGE.** The Section 1 vision needs the
+  agent to observe its own `CharacterStats`; it currently does not. Add a stat block to
+  `CollectObservations` + `ObservationProfile`:
+  - self stats: weight, movementSpeed, pushForce, dodgeForce, maxStamina (5 floats, normalized)
+  - opponent stats: same 5 (optional, behind a profile flag)
+  Then randomize `CharacterStats` per-episode in training so the network learns to
+  condition on them. Without this, a DefaultStats model won't transfer to Heavyweight/Speedster.
+
+---
+
+### Phase 3 — Reward shaping for distinct, effective playstyles
+
+Each `BotPersonality` asset is a different reward function over the SAME master
+architecture. New reward channels to add to `BotPersonality.cs` + `RLAgentBrain.cs`:
+
+- `ringOutWinBonus` — extra reward when the win came from a ring-out (vs a timeout)
+- `dodgeEvasionReward` — opponent's push whiffed because we dodged
+- `comboReward` — landed a hit within N steps of a dodge
+- `centerControlMultiplier` — per-step reward for being near center (Defensive)
+- `staminaSavingReward` — terminal reward proportional to leftover stamina (Defensive)
+- `edgeBaitReward` — reward for surviving near the edge (Matador/Trickster)
+
+**Personality designs:**
+- **Aggressive** — high `landPushHit`, high `edgePressure`, strong `timePenalty`. Fast, relentless.
+- **Defensive** — high `successfulBlock`, low `takePushHit` penalty, `centerControl` +
+  `staminaSaving` rewards, ~zero `timePenalty`. Patient wall.
+- **Rusher** — huge `landPushHit`, ~zero `takePushHit` penalty (reckless), strong
+  `timePenalty`, penalty for blocking. All-in.
+- **Balanced** — even values, mild everything.
+- **Trickster** (new) — high `dodgeEvasion` + `combo` rewards, `edgeBait` reward. Baits and punishes.
+
+Process: train each personality as a short specialist run (2-3M steps,
+`--initialize-from` the Phase 1 master). Evaluate round-robin in Bot vs Bot. A playstyle
+"works" if it (a) wins games and (b) is visibly distinct on screen.
+
+---
+
+### Phase 4 — Visual & gameplay polish
+
+**Sound** — new `Assets/Audio/`, simple `AudioSource` triggers: charge-up whine, push
+fire, hit impact, block clang, dodge whoosh, ring-out, round win/lose.
+
+**Effects:**
+- hit impact flash + particle burst
+- charge-up glow ramp scaled to charge level
+- dodge motion trail
+- ring-out splash (on top of the existing boundary flash)
+- screen shake on full-charge hits + brief hitstop (freeze-frame) on big impacts
+
+**Visuals:**
+- arena floor texture / grid so motion reads better
+- charge indicator ring around the player
+- shrink-ring warning pulse when the ring starts closing
+- clearer directional facing on player sprites
+
+**Gameplay feel:**
+- lower `timeUntilShrink` 30s → ~12s (flagged as too long in Section 0)
+- knockback feedback scaling; validate push-on-release feel
+- ring-shrink audio + visual telegraph
