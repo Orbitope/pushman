@@ -1116,6 +1116,9 @@ public static class PushmanSetup
             Player self = rl.GetComponent<Player>();
             foreach (var p in allPlayers) if (p != self) opp.Add(p);
             rl.opponents = opp.ToArray();
+
+            // Update BehaviorParameters with correct observation space size
+            ConfigureBehaviorParameters(rl.gameObject);
         }
 
         EditorUtility.SetDirty(am);
