@@ -1,77 +1,100 @@
 using UnityEngine;
 
-// Slowly walks toward player, randomly pushes or blocks
+/// <summary>
+/// Slowly walks toward the nearest player, faces them, and randomly pushes or blocks.
+/// </summary>
 public class ChaseBotBrain : MonoBehaviour, IPlayerBrain
 {
-    [Header("Behavior")]
-    public float walkSpeed = 0.5f;            // fraction of full speed
-    public float pushRange = 1.5f;
-    public float chaseRange = 25f;
-    public float aimDotThreshold = 0.8f;
+    [Header("Movement")]
+    public float walkSpeed = 0.6f;       // fraction of full movementSpeed
+    public float pushRange = 1.5f;       // world units — start pushing inside this
+    public float chaseRange = 30f;       // only chase within this range
+
+    [Header("Rotation")]
     public float rotationDeadzone = 5f;
 
-    [Header("Randomness")]
-    public float pushChance = 0.3f;           // 30% chance per frame to push
-    public float blockChance = 0.2f;          // 20% chance to block
+    [Header("Timing")]
+    public float minActionInterval = 0.8f;   // seconds between push/block decisions
+    public float maxActionInterval = 1.8f;
 
-    private Vector2 cachedMove;
-    private float cachedRotation;
-    private float blockUntil;
+    [Header("Randomness")]
+    [Range(0f, 1f)] public float pushChance  = 0.55f;
+    [Range(0f, 1f)] public float blockChance = 0.25f;
+
+    // Cached state — written by Update, read by IPlayerBrain methods.
+    private Vector2  cachedMove;
+    private float    cachedRotation;
+    private bool     wantPush;
+    private float    blockUntil;
+    private float    nextActionTime;
+
+    private Player cachedSelf;
+
+    void Awake()
+    {
+        cachedSelf = GetComponent<Player>();
+    }
+
+    void Start()
+    {
+        nextActionTime = Time.time + Random.Range(minActionInterval, maxActionInterval);
+    }
 
     void Update()
     {
-        cachedMove = Vector2.zero;
+        // Reset per-frame signals.
+        cachedMove     = Vector2.zero;
         cachedRotation = 0f;
+        wantPush       = false;
 
-        Player self = GetComponent<Player>();
-        if (self == null) return;
+        if (cachedSelf == null) return;
 
-        // Find nearest visible player
-        Player target = null;
-        float bestDist = float.MaxValue;
+        // Find nearest other player.
+        Player target    = null;
+        float  bestDist  = float.MaxValue;
         foreach (var p in FindObjectsByType<Player>(FindObjectsSortMode.None))
         {
-            if (p.gameObject == gameObject || !p.isActiveAndEnabled) continue;
+            if (p == cachedSelf || !p.isActiveAndEnabled) continue;
             float d = Vector2.Distance(p.transform.position, transform.position);
             if (d < bestDist) { bestDist = d; target = p; }
         }
-
         if (target == null) return;
 
-        Vector2 toTarget = ((Vector2)(target.transform.position - transform.position)).normalized;
-        float dist = toTarget.magnitude;
+        // Calculate direction AND distance from the raw (un-normalised) vector.
+        Vector2 rawDiff = (Vector2)(target.transform.position - transform.position);
+        float   dist    = rawDiff.magnitude;
+        Vector2 toTarget = dist > 0.001f ? rawDiff / dist : Vector2.up;
 
-        // Face target
-        float signedAngle = Vector2.SignedAngle(transform.up, toTarget);
-        if (Mathf.Abs(signedAngle) > rotationDeadzone)
-            cachedRotation = signedAngle > 0f ? -1f : 1f;
+        // Rotate to face target.
+        float angle = Vector2.SignedAngle(transform.up, toTarget);
+        if (Mathf.Abs(angle) > rotationDeadzone)
+            cachedRotation = angle > 0f ? -1f : 1f;
 
-        // Walk toward target at reduced speed
+        // Walk toward target when outside push range but inside chase range.
         if (dist > pushRange && dist < chaseRange)
-        {
             cachedMove = toTarget * walkSpeed;
-        }
 
-        // Push or block at random when in range and aimed
-        bool aimed = Vector2.Dot(transform.up, toTarget) > aimDotThreshold;
-        if (aimed && dist < pushRange)
+        // Push or block on a timer, only when close and roughly aimed.
+        bool aimed = Vector2.Dot(transform.up, toTarget) > 0.75f;
+        if (aimed && dist <= pushRange && Time.time >= nextActionTime)
         {
-            float rand = Random.value;
-            if (rand < pushChance)
+            float roll = Random.value;
+            if (roll < pushChance)
             {
-                cachedMove.y = 1f;  // push
+                wantPush = true;
             }
-            else if (rand < pushChance + blockChance)
+            else if (roll < pushChance + blockChance)
             {
                 blockUntil = Time.time + Random.Range(0.3f, 0.8f);
             }
+            nextActionTime = Time.time + Random.Range(minActionInterval, maxActionInterval);
         }
     }
 
-    public Vector2 GetMovement() => cachedMove;
-    public float GetRotationInput() => cachedRotation;
-    public bool GetPushInput() => cachedMove.y > 0.5f;
-    public bool GetBlockInput() => Time.time < blockUntil;
-    public bool GetDodgeInput() => false;
-    public bool GetSpecialInput() => false;
+    public Vector2 GetMovement()      => cachedMove;
+    public float   GetRotationInput() => cachedRotation;
+    public bool    GetPushInput()     => wantPush;
+    public bool    GetBlockInput()    => Time.time < blockUntil;
+    public bool    GetDodgeInput()    => false;
+    public bool    GetSpecialInput()  => false;
 }
