@@ -107,6 +107,14 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
   - Block drain: 15/s (unchanged)
   - Regen: 8/s, **Moving state only** — must disengage to recover
   - All values synced between `DefaultStats.asset` and `InitCharacterStats()`
+- ✅ **Dodge fix** (2026-05-20) — damping was eating the dash velocity
+  - `PlayerDodgingState.BeginState()` now zeros `rb.linearDamping` for the dash duration, restores in `EndState()`
+  - `dodgeForce` 10 → **18** (travels ~4.5 units in 0.25s — readable as a distinct action)
+- ✅ **Camera** (2026-05-20) — orthographic size set to 12 (shows full 20u ring + 2u padding each side, static)
+
+### Pending — Visual Polish
+- ❌ **Stamina bars: real-time drain animation** — the `StaminaHUD` fill bars update each frame but the instant snap may feel abrupt; add a smooth lerp to `fillAmount` so the drain is visually animated rather than a hard cut. Consider a "ghost" secondary bar that lags behind to show recent damage (common in fighting games).
+- ❌ **Remove body color-change as stamina indicator** — the red tint on <20% stamina in `Player.UpdateStateColor()` is redundant now that the HUD bars exist. Remove or repurpose it so color change only reflects state (stunned/dodging/charging), not stamina.
 
 ---
 

@@ -17,7 +17,7 @@ MonoBehaviour:
   maxStamina: 100
   staminaRegenRate: 8
   blockStaminaUsageRate: 15
-  dodgeForce: 10
+  dodgeForce: 18
   dodgeStamina: 40
   dodgeTime: 0.25
   pushForce: 8

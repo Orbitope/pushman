@@ -3,6 +3,7 @@ using UnityEngine;
 public class PlayerDodgingState : PlayerStateBase
 {
     private float dodgeEndTime;
+    private float savedDamping;
 
     public override void BeginState()
     {
@@ -13,6 +14,11 @@ public class PlayerDodgingState : PlayerStateBase
         }
 
         player.UseStamina(player.stats.dodgeStamina);
+
+        // Kill damping for the duration of the dash so the force isn't eaten by drag.
+        // At damping=2 a force-10 dash only travels ~2 units; with damping=0 it travels the full arc.
+        savedDamping = player.Body.linearDamping;
+        player.Body.linearDamping = 0f;
 
         Vector2 dir = player.Brain.GetMovement();
         if (dir == Vector2.zero) dir = player.transform.up;
@@ -30,6 +36,7 @@ public class PlayerDodgingState : PlayerStateBase
 
     public override void EndState()
     {
+        player.Body.linearDamping = savedDamping;
         player.SetVelocity(Vector2.zero);
     }
 }

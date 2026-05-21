@@ -840,7 +840,7 @@ public static class PushmanSetup
         stats.maxStamina            = 100f;
         stats.staminaRegenRate      = 8f;
         stats.blockStaminaUsageRate = 15f;
-        stats.dodgeForce            = 10f;
+        stats.dodgeForce            = 18f;
         stats.dodgeStamina          = 40f;
         stats.dodgeTime             = 0.25f;
         stats.pushForce             = 8f;
