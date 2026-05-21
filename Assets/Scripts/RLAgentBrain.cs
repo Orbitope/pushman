@@ -49,6 +49,10 @@ public class RLAgentBrain : Agent, IPlayerBrain
     {
         if (personality == null || arenaManager == null) return;
 
+        // Time pressure: constant per-step penalty so agents prefer shorter matches.
+        if (personality.timePenaltyPerStep != 0)
+            AddReward(personality.timePenaltyPerStep);
+
         if (personality.centerControlMultiplier != 0)
         {
             float dist = Vector2.Distance(transform.position, arenaManager.arenaCenter.position);
