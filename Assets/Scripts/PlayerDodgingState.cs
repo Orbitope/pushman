@@ -7,13 +7,13 @@ public class PlayerDodgingState : PlayerStateBase
 
     public override void BeginState()
     {
-        if (!player.CanUseStamina(player.stats.dodgeStamina))
+        // TryDodgeWithOverdraft handles both the normal and overdraft paths.
+        // Returns false only if stamina is empty AND overdraft is disabled or already in debt.
+        if (!player.TryDodgeWithOverdraft(player.stats.dodgeStamina))
         {
             player.SetState(Player.PlayerState.Moving);
             return;
         }
-
-        player.UseStamina(player.stats.dodgeStamina);
 
         // Kill damping for the duration of the dash so the force isn't eaten by drag.
         // At damping=2 a force-10 dash only travels ~2 units; with damping=0 it travels the full arc.

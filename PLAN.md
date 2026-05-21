@@ -45,8 +45,12 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 |---|---|
 | maxStamina | 100 |
 | staminaRegenRate | 8/s (Moving only) |
+| regenBoostThreshold | 1.5s in Moving state |
+| regenBoostMultiplier | 2.5× (= 20/s boosted rate) |
 | blockDrain | 15/s |
 | dodgeStamina | 40 (tap costs 40%) |
+| allowDodgeOverdraft | true |
+| overdraftPauseDuration | 3.0s regen lockout |
 | dodgeForce | 18 (damping zeroed during dash) |
 | pushStamina | 20–40 (scales with charge) |
 | pushChargeTime | 1s |
@@ -67,6 +71,8 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 - Push fires on mouse RELEASE (hold = charge, release = fire)
 - Camera is static (edge awareness is the core mechanic)
 - No sound yet
+- Overdraft dodge only (not push/block) — push spam would worsen with overdraft; block auto-breaks on empty
+- Regen boost is Moving-state only; timer resets on any non-Moving transition (charges must be earned)
 
 ---
 

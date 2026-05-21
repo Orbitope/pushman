@@ -31,6 +31,12 @@ public class Player : MonoBehaviour
     public Animator animator;
     public float currentStamina;
 
+    // Stamina regen boost tracking
+    private float _timeInMovingState;
+    private float _regenPausedUntil;
+    /// <summary>True while an overdraft dodge is serving its regen-lockout penalty.</summary>
+    public bool RegenPaused => Time.time < _regenPausedUntil;
+
     // State Scripts
     public PlayerMovingState movingStateScript;
     public PlayerChargingState chargingStateScript;
@@ -89,10 +95,26 @@ public class Player : MonoBehaviour
         currentStateScript?.UpdateState();
 
         // Regen only while Moving — not while stunned/charging/blocking/dodging.
-        // This makes stamina feel meaningful: you must disengage to recover.
-        if (stats != null && currentState == PlayerState.Moving)
+        // Moving-state timer accumulates to unlock a regen boost (reward for disengaging).
+        // Overdraft penalty (from a desperate dodge) pauses regen for overdraftPauseDuration.
+        if (stats != null)
         {
-            currentStamina = Mathf.Min(stats.maxStamina, currentStamina + stats.staminaRegenRate * Time.deltaTime);
+            if (currentState == PlayerState.Moving)
+            {
+                _timeInMovingState += Time.deltaTime;
+
+                if (!RegenPaused)
+                {
+                    float rate = _timeInMovingState >= stats.regenBoostThreshold
+                        ? stats.staminaRegenRate * stats.regenBoostMultiplier
+                        : stats.staminaRegenRate;
+                    currentStamina = Mathf.Min(stats.maxStamina, currentStamina + rate * Time.deltaTime);
+                }
+            }
+            else
+            {
+                _timeInMovingState = 0f;
+            }
         }
 
         UpdateStateColor();
@@ -234,6 +256,27 @@ public class Player : MonoBehaviour
     public void SetVelocity(Vector2 velocity) => rb.linearVelocity = velocity;
     public bool CanUseStamina(float amount) => currentStamina >= amount;
     public void UseStamina(float amount) => currentStamina = Mathf.Max(0f, currentStamina - amount);
+
+    /// <summary>
+    /// Attempt a dodge that may overdraft stamina. Allows the dodge even when stamina would go
+    /// negative, provided overdraft is enabled and the player is not already in debt (stamina &lt; 0).
+    /// Returns true if the dodge should proceed; applies regen lockout penalty automatically.
+    /// </summary>
+    public bool TryDodgeWithOverdraft(float cost)
+    {
+        if (CanUseStamina(cost))
+        {
+            UseStamina(cost);
+            return true;
+        }
+        if (stats.allowDodgeOverdraft && currentStamina >= 0f)
+        {
+            currentStamina -= cost;           // intentionally goes negative
+            _regenPausedUntil = Time.time + stats.overdraftPauseDuration;
+            return true;
+        }
+        return false;
+    }
 
     public void Stun(float duration)
     {
