@@ -24,6 +24,16 @@ public class ObservationProfile : ScriptableObject
     public bool useFOV = false;
     [Range(10f, 360f)] public float fieldOfViewAngle = 120f;
 
+    [Header("Self Stats — 5 floats (weight, speed, pushForce, dodgeForce, maxStamina — normalized)")]
+    [Tooltip("Lets the agent observe its own CharacterStats so one network generalises across " +
+             "DefaultStats / Heavyweight / Speedster without retraining. Adds 5 obs.")]
+    public bool selfStats = true;
+
+    [Header("Opponent Stats — 5 floats per opponent")]
+    [Tooltip("Observe the opponent's CharacterStats. Adds 5 obs per opponent. Off by default — " +
+             "useful for Phase 3 specialist training.")]
+    public bool opponentStats = false;
+
     [Header("Profile C — Humanized (stub, not yet implemented)")]
     [Tooltip("Applies Gaussian noise to opponent position/velocity observations.")]
     public bool applyNoise = false;
@@ -36,13 +46,15 @@ public class ObservationProfile : ScriptableObject
     {
         int total = 0;
         if (selfKinematics) total += 3;
-        if (selfStamina) total += 1;
-        if (selfState) total += 1;
-        if (arenaBounds) total += 3; // toCenter(2) + ringRadius(1)
+        if (selfStamina)    total += 1;
+        if (selfState)      total += 1;
+        if (arenaBounds)    total += 3; // toCenter(2) + ringRadius(1)
+        if (selfStats)      total += 5; // weight, speed, pushForce, dodgeForce, maxStamina
         int perOpp = 0;
         if (opponentPosition) perOpp += 2;
         if (opponentVelocity) perOpp += 2;
-        if (opponentState) perOpp += 1;
+        if (opponentState)    perOpp += 1;
+        if (opponentStats)    perOpp += 5;
         total += perOpp * opponentCount;
         return total;
     }

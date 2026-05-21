@@ -14,15 +14,17 @@ using UnityEngine.SceneManagement;
 // Pushman > 3. Build Training Scene — generates ML_Training_Scene with N×N arenas
 public static class PushmanSetup
 {
-    private const int OBS_SIZE = 13; // selfKin(3)+selfStam(1)+selfState(1)+arena(3)+opp(5)
+    private const int OBS_SIZE = 18; // selfKin(3)+selfStam(1)+selfState(1)+selfStats(5)+arena(3)+opp(5)
     private const string PREFAB_FOLDER = "Assets/Prefabs";
     private const string ARENA_PREFAB_PATH = PREFAB_FOLDER + "/Arena.prefab";
     private const string PLAYER_RL_PREFAB_PATH = PREFAB_FOLDER + "/Player_RL.prefab";
     private const string TRAINING_SCENE_PATH = "Assets/Scenes/ML_Training_Scene.unity";
+    private const string TRAINING_SCENE_SMALL_PATH = "Assets/Scenes/ML_Training_Scene_Small.unity";
+    private const string TRAINING_SCENE_MIXED_PATH = "Assets/Scenes/ML_Training_Mixed.unity";
     private const int GRID_SIZE = 8;           // GRID_SIZE × GRID_SIZE arenas (full training)
     private const int GRID_SIZE_SMALL = 4;    // smaller grid for fast/dev runs (4×4 = 16 arenas)
+    private const int GRID_SIZE_MIXED = 6;    // 6×6=36 arenas (divisible by 3 for even bot distribution)
     private const float ARENA_SPACING = 25f;  // must be > ringOutRadius*2 so players can't cross arenas
-    private const string TRAINING_SCENE_SMALL_PATH = "Assets/Scenes/ML_Training_Scene_Small.unity";
 
     // -----------------------------------------------------------------------
     // 1. Setup Test Scene
@@ -461,6 +463,135 @@ public static class PushmanSetup
         AssetDatabase.Refresh();
         Debug.Log($"[PushmanSetup] Small training scene built: {GRID_SIZE_SMALL}×{GRID_SIZE_SMALL} = {total} arenas. " +
                   $"Saved → {TRAINING_SCENE_SMALL_PATH}");
+    }
+
+    // -----------------------------------------------------------------------
+    // 3c. Build Mixed-Opponent Training Scene — 6×6 = 36 arenas
+    //     Player1 = master RLAgentBrain; Player2 rotates through 3 scripted bots
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/3c. Build Mixed-Opponent Training Scene (6x6)")]
+    public static void BuildMixedTrainingScene()
+    {
+        var arenaPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ARENA_PREFAB_PATH);
+        if (arenaPrefab == null)
+        {
+            Debug.LogError("[PushmanSetup] Arena prefab not found. Run '2. Save Prefabs' first.");
+            return;
+        }
+
+        var profileA    = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+                            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+        var personality = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+                            "Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        var defaultStats    = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+                            "Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        var heavyStats      = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+                            "Assets/ScriptableObjects/Characters/Heavyweight.asset");
+        var speedsterStats  = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+                            "Assets/ScriptableObjects/Characters/Speedster.asset");
+
+        var trainingScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        int total = GRID_SIZE_MIXED * GRID_SIZE_MIXED;
+        int arenaIndex = 0;
+
+        for (int row = 0; row < GRID_SIZE_MIXED; row++)
+        {
+            for (int col = 0; col < GRID_SIZE_MIXED; col++)
+            {
+                Vector3 offset = new Vector3(col * ARENA_SPACING, row * ARENA_SPACING, 0f);
+                GameObject arenaGO = PrefabUtility.InstantiatePrefab(arenaPrefab) as GameObject;
+                arenaGO.name = $"Arena_{arenaIndex}";
+                arenaGO.transform.position = offset;
+
+                ArenaManager am = arenaGO.GetComponent<ArenaManager>();
+                if (am != null)
+                {
+                    // Populate statsPool so stats randomise every round.
+                    am.statsPool = new List<CharacterStats>();
+                    if (defaultStats   != null) am.statsPool.Add(defaultStats);
+                    if (heavyStats     != null) am.statsPool.Add(heavyStats);
+                    if (speedsterStats != null) am.statsPool.Add(speedsterStats);
+
+                    WireMixedArena(arenaGO, am, profileA, personality, arenaIndex);
+                }
+
+                arenaIndex++;
+                EditorUtility.DisplayProgressBar("Building Mixed Training Scene",
+                    $"Arena {arenaIndex}/{total}", (float)arenaIndex / total);
+            }
+        }
+
+        EditorUtility.ClearProgressBar();
+        EnsureFolders();
+        EditorSceneManager.SaveScene(trainingScene, TRAINING_SCENE_MIXED_PATH);
+
+        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!scenes.Exists(s => s.path == TRAINING_SCENE_MIXED_PATH))
+            scenes.Add(new EditorBuildSettingsScene(TRAINING_SCENE_MIXED_PATH, true));
+        EditorBuildSettings.scenes = scenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log($"[PushmanSetup] Mixed training scene: {GRID_SIZE_MIXED}×{GRID_SIZE_MIXED} = {total} arenas " +
+                  $"(12× ChaseBotBrain | 12× StandingBotBrain | 12× DodgingBotBrain). " +
+                  $"Saved → {TRAINING_SCENE_MIXED_PATH}");
+    }
+
+    // Wire a mixed arena: Player1 stays as RLAgentBrain; Player2 is replaced by a scripted bot
+    // rotating through Chase → Standing → Dodging based on arenaIndex % 3.
+    private static void WireMixedArena(GameObject arenaGO, ArenaManager am,
+                                       ObservationProfile profile, BotPersonality personality,
+                                       int arenaIndex)
+    {
+        am.allPlayers  = new List<Player>(arenaGO.GetComponentsInChildren<Player>());
+        am.spawnPoints = new List<Transform>();
+        am.arenaCenter = arenaGO.transform.Find("ArenaCenter");
+
+        for (int i = 1; i <= 4; i++)
+        {
+            Transform sp = arenaGO.transform.Find($"SpawnPoint_{i}");
+            if (sp != null) am.spawnPoints.Add(sp);
+        }
+
+        var p1GO = arenaGO.transform.Find("Player1")?.gameObject;
+        var p2GO = arenaGO.transform.Find("Player2")?.gameObject;
+
+        if (p1GO == null || p2GO == null)
+        {
+            Debug.LogWarning($"[PushmanSetup] Arena_{arenaIndex}: Player1 or Player2 not found — skipping.");
+            return;
+        }
+
+        // Wire Player1 as the master RL agent.
+        var rl1 = p1GO.GetComponent<RLAgentBrain>();
+        if (rl1 != null)
+        {
+            rl1.arenaManager       = am;
+            rl1.observationProfile = profile;
+            rl1.personality        = personality;
+            rl1.opponents          = new Player[] { p2GO.GetComponent<Player>() };
+            EditorUtility.SetDirty(rl1);
+        }
+
+        // Strip Player2's ML-Agents components (order matters: dependents first).
+        var dr2 = p2GO.GetComponent<DecisionRequester>();
+        if (dr2 != null) Object.DestroyImmediate(dr2);
+        var rl2 = p2GO.GetComponent<RLAgentBrain>();
+        if (rl2 != null) Object.DestroyImmediate(rl2);
+        var bp2 = p2GO.GetComponent<BehaviorParameters>();
+        if (bp2 != null) Object.DestroyImmediate(bp2);
+
+        // Add the scripted brain — cycles 0→Chase, 1→Standing, 2→Dodging.
+        switch (arenaIndex % 3)
+        {
+            case 0: p2GO.AddComponent<ChaseBotBrain>();    break;
+            case 1: p2GO.AddComponent<StandingBotBrain>(); break;
+            case 2: p2GO.AddComponent<DodgingBotBrain>();  break;
+        }
+
+        EditorUtility.SetDirty(am);
+        EditorUtility.SetDirty(arenaGO);
     }
 
     // -----------------------------------------------------------------------
@@ -956,6 +1087,15 @@ public static class PushmanSetup
         am.spawnPoints = new List<Transform>();
         am.arenaCenter = arenaGO.transform.Find("ArenaCenter");
 
+        // Populate stats pool so agents train across all three character variants.
+        var defaultStats   = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        var heavyStats     = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Heavyweight.asset");
+        var speedsterStats = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Speedster.asset");
+        am.statsPool = new List<CharacterStats>();
+        if (defaultStats   != null) am.statsPool.Add(defaultStats);
+        if (heavyStats     != null) am.statsPool.Add(heavyStats);
+        if (speedsterStats != null) am.statsPool.Add(speedsterStats);
+
         for (int i = 1; i <= 4; i++)
         {
             Transform sp = arenaGO.transform.Find($"SpawnPoint_{i}");
@@ -1114,6 +1254,10 @@ public static class PushmanSetup
         stats.maxStamina            = 100f;
         stats.staminaRegenRate      = 8f;
         stats.blockStaminaUsageRate = 15f;
+        stats.regenBoostThreshold   = 0.75f;
+        stats.regenBoostMultiplier  = 2.5f;
+        stats.allowDodgeOverdraft   = true;
+        stats.overdraftPauseDuration= 1.5f;
         stats.dodgeForce            = 18f;
         stats.dodgeStamina          = 40f;
         stats.dodgeTime             = 0.25f;

@@ -18,6 +18,11 @@ public class ArenaManager : MonoBehaviour
     [Header("Players")]
     public List<Player> allPlayers;
 
+    [Header("Character Variety")]
+    [Tooltip("If non-empty, each player is assigned a random CharacterStats from this pool every round. " +
+             "Trains one network that generalises across stat variants. Leave empty for fixed stats.")]
+    public List<CharacterStats> statsPool;
+
     [Header("Spawn Points")]
     public List<Transform> spawnPoints;
 
@@ -190,6 +195,16 @@ public class ArenaManager : MonoBehaviour
             p.transform.position = spawn.position;
             p.transform.rotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
             if (rb != null) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
+
+            // Randomise stats each round if a pool is provided — teaches the agent to
+            // adapt its playstyle based on its self-observed CharacterStats.
+            if (statsPool != null && statsPool.Count > 0)
+            {
+                var chosen = statsPool[Random.Range(0, statsPool.Count)];
+                p.stats = chosen;
+                Rigidbody2D prb = p.GetComponent<Rigidbody2D>();
+                if (prb != null) prb.mass = chosen.weight;
+            }
 
             p.currentStamina = p.stats != null ? p.stats.maxStamina : 0f;
             p.SetState(Player.PlayerState.Moving);

@@ -31,14 +31,16 @@ public class RLAgentBrain : Agent, IPlayerBrain
 
     // Cached from ObservationProfile; falls back to all-true if profile is null.
     private bool SelfKinematics => observationProfile == null || observationProfile.selfKinematics;
-    private bool SelfStamina => observationProfile == null || observationProfile.selfStamina;
-    private bool SelfState => observationProfile == null || observationProfile.selfState;
-    private bool ArenaBounds => observationProfile == null || observationProfile.arenaBounds;
-    private bool OppPosition => observationProfile == null || observationProfile.opponentPosition;
-    private bool OppVelocity => observationProfile == null || observationProfile.opponentVelocity;
-    private bool OppState => observationProfile == null || observationProfile.opponentState;
-    private bool UseFOV => observationProfile != null && observationProfile.useFOV;
-    private float FOVAngle => observationProfile != null ? observationProfile.fieldOfViewAngle : 120f;
+    private bool SelfStamina    => observationProfile == null || observationProfile.selfStamina;
+    private bool SelfState      => observationProfile == null || observationProfile.selfState;
+    private bool SelfStats      => observationProfile == null || observationProfile.selfStats;
+    private bool ArenaBounds    => observationProfile == null || observationProfile.arenaBounds;
+    private bool OppPosition    => observationProfile == null || observationProfile.opponentPosition;
+    private bool OppVelocity    => observationProfile == null || observationProfile.opponentVelocity;
+    private bool OppState       => observationProfile == null || observationProfile.opponentState;
+    private bool OppStats       => observationProfile != null && observationProfile.opponentStats;
+    private bool UseFOV         => observationProfile != null && observationProfile.useFOV;
+    private float FOVAngle      => observationProfile != null ? observationProfile.fieldOfViewAngle : 120f;
 
     public override void Initialize()
     {
@@ -92,7 +94,18 @@ public class RLAgentBrain : Agent, IPlayerBrain
         }
 
         if (SelfStamina) sensor.AddObservation(myPlayer.currentStamina / myPlayer.stats.maxStamina);
-        if (SelfState) sensor.AddObservation((float)myPlayer.currentState / 5f);
+        if (SelfState)   sensor.AddObservation((float)myPlayer.currentState / 5f);
+
+        // CharacterStats obs — lets one network generalise across all stat variants.
+        // Norm constants span Default/Heavyweight/Speedster into roughly [0,1].
+        if (SelfStats && myPlayer.stats != null)
+        {
+            sensor.AddObservation(myPlayer.stats.weight          / 3f);
+            sensor.AddObservation(myPlayer.stats.movementSpeed   / 12f);
+            sensor.AddObservation(myPlayer.stats.pushForce       / 25f);
+            sensor.AddObservation(myPlayer.stats.dodgeForce      / 30f);
+            sensor.AddObservation(myPlayer.stats.maxStamina      / 150f);
+        }
 
         if (ArenaBounds && center != null)
         {
@@ -107,7 +120,7 @@ public class RLAgentBrain : Agent, IPlayerBrain
             if (opp == null)
             {
                 // Pad missing opponents with zeros so space size is fixed.
-                int pad = (OppPosition ? 2 : 0) + (OppVelocity ? 2 : 0) + (OppState ? 1 : 0);
+                int pad = (OppPosition ? 2 : 0) + (OppVelocity ? 2 : 0) + (OppState ? 1 : 0) + (OppStats ? 5 : 0);
                 for (int i = 0; i < pad; i++) sensor.AddObservation(0f);
                 continue;
             }
@@ -143,6 +156,19 @@ public class RLAgentBrain : Agent, IPlayerBrain
             }
 
             if (OppState) sensor.AddObservation(visible ? (float)opp.currentState / 5f : 0f);
+
+            if (OppStats)
+            {
+                if (visible && opp.stats != null)
+                {
+                    sensor.AddObservation(opp.stats.weight        / 3f);
+                    sensor.AddObservation(opp.stats.movementSpeed / 12f);
+                    sensor.AddObservation(opp.stats.pushForce     / 25f);
+                    sensor.AddObservation(opp.stats.dodgeForce    / 30f);
+                    sensor.AddObservation(opp.stats.maxStamina    / 150f);
+                }
+                else { for (int i = 0; i < 5; i++) sensor.AddObservation(0f); }
+            }
         }
     }
 
@@ -214,8 +240,8 @@ public class RLAgentBrain : Agent, IPlayerBrain
         Debug.Log($"[{gameObject.name}] Observation Space Size: {spaceSize} | Opponents: {oppCount} | Mode: {actionSpaceMode}");
     }
 
-    // Profile A defaults: selfKin(3)+selfStam(1)+selfState(1)+arena(3) + per-opp(5)
-    private static int ComputeDefaultSpaceSize(int oppCount) => 8 + oppCount * 5;
+    // Profile A defaults: selfKin(3)+selfStam(1)+selfState(1)+selfStats(5)+arena(3) + per-opp(5)
+    private static int ComputeDefaultSpaceSize(int oppCount) => 13 + oppCount * 5;
 
     // ArenaManager calls these; EndEpisode is called separately by ArenaManager to keep ordering explicit.
     public void RegisterWin() { if (personality) AddReward(personality.winRound); }
