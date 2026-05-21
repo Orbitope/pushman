@@ -11,7 +11,7 @@
 
 ---
 
-## 0. Implementation Status (updated 2026-05-19)
+## 0. Implementation Status (updated 2026-05-20)
 
 ### ⭐ FULL IMPLEMENTATION COMPLETE ⭐
 All code, editor tooling, prefabs, scenes, and visual feedback are complete. Ready for testing and ML-Agents training.
@@ -29,6 +29,26 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
   - `StandingBotBrain` — stationary, pushes every 2s
   - `ChaseBotBrain` — walks slowly, random push/block
   - `DodgingBotBrain` — dodges toward player every 5s
+
+### Post-Implementation Fixes (2026-05-20)
+- ✅ **RLAgentBrain Input System** — Fixed `Heuristic()` using legacy `Input.GetButton/GetAxisRaw`
+  - Replaced with `Keyboard.current` / `Mouse.current` (new Input System)
+  - Resolved: "InvalidOperationException: You are trying to read Input using UnityEngine.Input class" in RLAgentBrain.Heuristic
+- ✅ **Observation Space Mismatch (again)** — Root cause was fragile SerializedObject path lookup in ConfigureBehaviorParameters
+  - Switched to direct `bp.BrainParameters.VectorObservationSize = 13` API — now reliable
+  - Re-ran `Pushman/1. Setup Test Scene` to apply fix
+- ✅ **Player Sprites** — Added full sprite system
+  - `Assets/Sprites/PlayerCircle.png` — 64px filled circle sprite for player body
+  - `Assets/Sprites/PushHand.png` — 24×16 rect for push fist (shown in Charging/Pushing states)
+  - `Assets/Sprites/BlockShield.png` — 48×10 rect for block shield (shown in Blocking state)
+  - `Assets/Sprites/ArenaBoundary.png` — 256px ring outline for stage boundary visual
+  - Player1=Green, Player2=Red; arena ring at 45% opacity behind players
+- ✅ **Hand Toggling** — `Player.cs` now has `pushHand`/`blockHand` SpriteRenderer fields
+  - Auto-discovered from children named "PushHand"/"BlockHand" in Awake
+  - `UpdateHands()` called in Update() — shows push hand in Charging+Pushing, block shield in Blocking
+  - Dodge state adds blue body tint via `UpdateStateColor()`
+- ✅ **PlayerVisuals.cs** — Optional companion component; auto-discovers hands by child name as backup
+- ✅ **Prefabs updated** — Re-ran `Pushman/2. Save Prefabs` after sprite setup
 
 ---
 
