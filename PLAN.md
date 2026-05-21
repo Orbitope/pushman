@@ -97,8 +97,8 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 - ⚠️ **v1 bots play weakly** — root-caused to a reward-scaling bug, NOT under-training. Full diagnosis + 4-phase fix roadmap in **Section 4**.
 
 **Next up → Section 4 "Model Iteration & Polish Roadmap"** (branch `feature/model-iteration`)
-- 🔄 Phase 1 — Task 1a ✅; Task 1c 🔄 training live (Pushman_Bot_v2, may 21 13:51, obs fix applied)
-- 🔄 Phase 2 — Task 2a ✅ --init-from flag; Task 2c ✅ mixed scene (Pushman/3c); Task 2d ✅ CharacterStats obs (selfStats=18 obs, statsPool in ArenaManager)
+- ✅ Phase 1 — Task 1a ✅ reward retune; Task 1c ✅ trained (5M steps, 53m); Task 1d ✅ ONNX integrated
+- 🔄 Phase 2 — Task 2a ✅ --init-from; Task 2b 🔄 self-play training live (20M steps, ~6-10h); Task 2c ✅ mixed scene; Task 2d ✅ CharacterStats obs
 - ❌ Phase 3 — reward shaping for distinct playstyles
 - ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
 
