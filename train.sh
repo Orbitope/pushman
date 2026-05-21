@@ -40,17 +40,17 @@ CMD="mlagents-learn TrainingConfigs/${CONFIG}.yaml --run-id=${RUN_ID} --timeout-
 
 if $STANDALONE; then
   BUILD_DIR="$(dirname "$0")/builds/Pushman_Training"
-  if [ -d "$BUILD_DIR.app" ]; then
-    # macOS .app bundle (regular macOS build)
-    BUILD="$BUILD_DIR"
-    echo "[train.sh] Mode: STANDALONE  build=$BUILD_DIR.app"
-  elif [ -d "$BUILD_DIR" ] && [ -f "$BUILD_DIR/Pushman" ]; then
-    # Linux-style folder (Unity Server Build on macOS)
+  if [ -d "$BUILD_DIR" ] && [ -f "$BUILD_DIR/Pushman" ]; then
+    # Preferred: Unity Server Build folder (genuinely headless — no graphics pipeline init).
     BUILD="$BUILD_DIR/Pushman"
-    echo "[train.sh] Mode: STANDALONE  binary=$BUILD"
+    echo "[train.sh] Mode: STANDALONE (Server Build)  binary=$BUILD"
+  elif [ -d "$BUILD_DIR.app" ]; then
+    # Fallback: regular macOS .app — still works but slower (inits graphics even with --no-graphics).
+    BUILD="$BUILD_DIR"
+    echo "[train.sh] Mode: STANDALONE (macOS .app — prefer Server Build for speed)  build=$BUILD_DIR.app"
   else
-    echo "ERROR: Standalone build not found at builds/Pushman_Training(.app)."
-    echo "       Build in Unity: Build Profiles → macOS → Build → save as builds/Pushman_Training"
+    echo "ERROR: Standalone build not found at builds/Pushman_Training or builds/Pushman_Training.app"
+    echo "       For training: Build Profiles → macOS Server → Build → save as builds/Pushman_Training"
     exit 1
   fi
   CMD="$CMD --env=$BUILD --no-graphics"
