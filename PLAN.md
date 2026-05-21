@@ -115,15 +115,15 @@ All code, editor tooling, prefabs, scenes, and visual feedback are complete. Rea
 ### Pending — Bugs (pre-identified, not yet hit in testing)
 
 **Definite / likely to hit:**
-- ❌ **Ring shrink is invisible** — `ArenaManager` correctly shrinks `currentRingRadius` after 30s of inactivity, but `ArenaBoundary` SpriteRenderer scale is baked at setup time. Players ring out at an invisible boundary inside the visible ring. Fix: `ArenaManager` must update the `ArenaBoundary` child's scale each frame to match `currentRingRadius`.
-- ❌ **No round-reset feedback** — when a ring-out occurs, players just teleport with no pause, flash, or score display. Will be confusing during testing. Fix: brief freeze-frame or color flash on ring-out + simple score counter UI.
-- ❌ **Input priority: accidental mouse hold blocks dodge** — `PlayerMovingState` checks push → block → dodge in order. Holding left mouse + pressing Space enters Charging, not Dodging. Likely to feel like "dodge is broken" to new players. Fix: either consume `wasPressedThisFrame` for dodge regardless of mouse state, or document as intentional trade-off.
-- ❌ **`CharacterStats.cs` C# field defaults are stale** — class defaults (`dodgeForce=12`, `dodgeStamina=20`, `blockUsageRate=20`) don't match `DefaultStats.asset` or `InitCharacterStats()`. New assets created from the menu will have wrong values. Fix: sync C# defaults to match the tuned values.
+- ✅ **Ring shrink is invisible** — `ArenaManager.FixedUpdate()` now scales `ArenaBoundary` child each tick to match `currentRingRadius`.
+- ✅ **No round-reset feedback** — ring-out now triggers a coroutine: boundary flashes white → 0.6s pause → reset. `ArenaManager` tracks per-player win scores; `StaminaHUD` shows scores in matching colors at top corners.
+- ✅ **Input priority: accidental mouse hold blocks dodge** — `PlayerMovingState` now checks dodge first (it's one-shot), then push, then block.
+- ✅ **`CharacterStats.cs` C# field defaults are stale** — synced to match `DefaultStats.asset` and `InitCharacterStats()`.
 
 **Medium risk — training-relevant:**
-- ❌ **`FindObjectsByType<Player>()` called every `Update()` in all 3 bot brains** — fine in the test scene (1 arena), but in the 64-arena training scene this is hundreds of expensive searches per frame. Fix: cache the target in `Start()` or have the bot brain accept a direct reference via an inspector field or `ArenaManager`.
-- ❌ **`DodgingBotBrain.wantDodge` is single-frame, execution-order dependent** — the flag is true for exactly one frame. If `Player.Update()` runs before `DodgingBotBrain.Update()` that frame, the dodge input is silently missed. Script execution order is not configured. Fix: use a persistent flag that clears only after `GetDodgeInput()` is read, or configure Script Execution Order.
-- ❌ **Observation space size hard-coded at 13; will break if `ObservationProfile` changes** — if any flag in `Profile_A.asset` is toggled, actual collected observations diverge from `VectorObservationSize = 13`, causing a hard ML-Agents runtime error. Fix: call `observationProfile.ComputeSpaceSize()` when setting up `BehaviorParameters` rather than using `OBS_SIZE` constant.
+- ✅ **`FindObjectsByType<Player>()` called every `Update()` in all 3 bot brains** — all 3 now cache their target; search only runs when the cached reference is null or inactive.
+- ✅ **`DodgingBotBrain.wantDodge` is single-frame, execution-order dependent** — flag now persists until `GetDodgeInput()` consumes it; execution order no longer matters.
+- ✅ **Observation space size hard-coded** — `PushmanSetup` now calls `profile.ComputeSpaceSize(1)` so declared size stays in sync with profile flags.
 
 **Design ambiguities to confirm during play:**
 - ✅ **Dodge bypasses block** — intentional design. Dodge is the counter to block; a dodge-tackle always stuns regardless of block stance. Documented.
