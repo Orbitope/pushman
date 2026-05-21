@@ -311,18 +311,18 @@ public static class PushmanSetup
         DestroyChild(playerGO, "PushHand");
         DestroyChild(playerGO, "BlockHand");
 
-        // Push hand — small fist directly in front of the player body
-        var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, tint,
+        // Push hand — bright white fist in front of the player so it contrasts against the colored body
+        var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, Color.white,
                                     localPos: new Vector3(0f, 0.72f, 0f),
-                                    localScale: new Vector3(0.35f, 0.25f, 1f),
-                                    sortOrder: 1);
+                                    localScale: new Vector3(0.45f, 0.30f, 1f),
+                                    sortOrder: 2);
         pushHand.SetActive(false);
 
-        // Block shield — wide plate across the front
-        var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, tint * 0.75f,
-                                     localPos: new Vector3(0f, 0.55f, 0f),
-                                     localScale: new Vector3(1f, 0.15f, 1f),
-                                     sortOrder: 1);
+        // Block shield — cyan-tinted wide plate so it reads differently from the body
+        var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, new Color(0.4f, 0.9f, 1f),
+                                     localPos: new Vector3(0f, 0.60f, 0f),
+                                     localScale: new Vector3(1.1f, 0.18f, 1f),
+                                     sortOrder: 2);
         blockHand.SetActive(false);
 
         // Wire hand references directly on Player (no extra component needed).
@@ -365,16 +365,17 @@ public static class PushmanSetup
     {
         DestroyChild(playerGO, "StaminaCanvas");
 
-        // Canvas
+        // Canvas — IMPORTANT: set localScale AFTER AddComponent<Canvas>() because
+        // adding Canvas promotes Transform → RectTransform and resets the scale to (1,1,1).
         var canvasGO = new GameObject("StaminaCanvas");
         canvasGO.transform.SetParent(playerGO.transform);
         canvasGO.transform.localPosition = new Vector3(0f, 0.85f, 0f);
-        canvasGO.transform.localScale    = Vector3.one * 0.01f;
 
         var canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         var crt = canvasGO.GetComponent<RectTransform>();
-        crt.sizeDelta = new Vector2(80f, 10f);   // 80×10 px → 0.80×0.10 world units at scale 0.01
+        crt.sizeDelta   = new Vector2(80f, 10f);   // 80×10 UI px
+        crt.localScale  = Vector3.one * 0.01f;     // → 0.80×0.10 world units
 
         // Background
         var bgGO  = new GameObject("Background");

@@ -12,7 +12,15 @@ public class HumanBrain : MonoBehaviour, IPlayerBrain
     void OnEnable()
     {
         keyboard = Keyboard.current;
-        mouse = Mouse.current;
+        mouse    = Mouse.current;
+    }
+
+    // Re-acquire devices every frame in case they were null at OnEnable time
+    // (Input System may not have registered them yet at scene start).
+    void Update()
+    {
+        if (keyboard == null) keyboard = Keyboard.current;
+        if (mouse    == null) mouse    = Mouse.current;
     }
 
     public Vector2 GetMovement()
