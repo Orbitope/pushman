@@ -18,7 +18,7 @@ public class PlayerPushingState : PlayerStateBase
         }
 
         player.UseStamina(player.stats.pushStamina);
-        player.animator?.SetTrigger("Push");
+        if (player.animator != null) player.animator.SetTrigger("Push");
         player.ExecutePush(chargeNorm);
     }
 

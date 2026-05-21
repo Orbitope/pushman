@@ -19,7 +19,7 @@ public class PlayerDodgingState : PlayerStateBase
 
         player.SetVelocity(dir.normalized * player.stats.dodgeForce);
         dodgeEndTime = Time.time + player.stats.dodgeTime;
-        player.animator?.SetTrigger("Dodge");
+        if (player.animator != null) player.animator.SetTrigger("Dodge");
     }
 
     public override void UpdateState()

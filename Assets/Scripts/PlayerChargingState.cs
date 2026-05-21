@@ -8,7 +8,7 @@ public class PlayerChargingState : PlayerStateBase
     public override void BeginState()
     {
         currentChargeTime = 0f;
-        player.animator?.SetBool("IsCharging", true);
+        if (player.animator != null) player.animator.SetBool("IsCharging", true);
     }
 
     public override void UpdateState()
@@ -28,6 +28,6 @@ public class PlayerChargingState : PlayerStateBase
 
     public override void EndState()
     {
-        player.animator?.SetBool("IsCharging", false);
+        if (player.animator != null) player.animator.SetBool("IsCharging", false);
     }
 }

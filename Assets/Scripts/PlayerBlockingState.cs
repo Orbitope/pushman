@@ -4,7 +4,7 @@ public class PlayerBlockingState : PlayerStateBase
 {
     public override void BeginState()
     {
-        player.animator?.SetBool("IsBlocking", true);
+        if (player.animator != null) player.animator.SetBool("IsBlocking", true);
     }
 
     public override void UpdateState()
@@ -33,6 +33,6 @@ public class PlayerBlockingState : PlayerStateBase
 
     public override void EndState()
     {
-        player.animator?.SetBool("IsBlocking", false);
+        if (player.animator != null) player.animator.SetBool("IsBlocking", false);
     }
 }

@@ -46,7 +46,7 @@ public class Player : MonoBehaviour
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        animator = GetComponent<Animator>();
+        animator = GetComponent<Animator>();  // may be null — states check before calling
         spriteRenderer = GetComponent<SpriteRenderer>();
 
         Brain = GetComponent<IPlayerBrain>();
