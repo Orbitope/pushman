@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
@@ -153,23 +154,37 @@ public class RLAgentBrain : Agent, IPlayerBrain
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        int button = Input.GetButton("Fire1") ? 1
-                   : Input.GetButton("Fire2") ? 2
-                   : Input.GetButtonDown("Jump") ? 3 : 0;
+        var keyboard = Keyboard.current;
+        var mouse    = Mouse.current;
+
+        float h = 0f, v = 0f;
+        if (keyboard != null)
+        {
+            if (keyboard.aKey.isPressed) h -= 1f;
+            if (keyboard.dKey.isPressed) h += 1f;
+            if (keyboard.sKey.isPressed) v -= 1f;
+            if (keyboard.wKey.isPressed) v += 1f;
+        }
+
+        bool fire1 = mouse != null && mouse.leftButton.isPressed;
+        bool fire2 = mouse != null && mouse.rightButton.isPressed;
+        bool jump  = keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
+
+        int button = fire1 ? 1 : fire2 ? 2 : jump ? 3 : 0;
 
         if (actionSpaceMode == ActionSpaceMode.Discrete)
         {
             var d = actionsOut.DiscreteActions;
-            d[0] = AxisToDiscrete(Input.GetAxisRaw("Horizontal"));
-            d[1] = AxisToDiscrete(Input.GetAxisRaw("Vertical"));
+            d[0] = AxisToDiscrete(h);
+            d[1] = AxisToDiscrete(v);
             d[2] = 0;
             d[3] = button;
         }
         else
         {
             var c = actionsOut.ContinuousActions;
-            c[0] = Input.GetAxisRaw("Horizontal");
-            c[1] = Input.GetAxisRaw("Vertical");
+            c[0] = h;
+            c[1] = v;
             c[2] = 0f;
             actionsOut.DiscreteActions.Array[actionsOut.DiscreteActions.Offset] = button;
         }

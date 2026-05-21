@@ -15,6 +15,11 @@ public class Player : MonoBehaviour
 
     [Header("UI")]
     public Slider staminaSlider;
+
+    [Header("Visuals")]
+    public SpriteRenderer pushHand;    // assigned by PushmanSetup or auto-discovered
+    public SpriteRenderer blockHand;
+
     private SpriteRenderer spriteRenderer;
     private Color baseColor = Color.white;
 
@@ -65,6 +70,18 @@ public class Player : MonoBehaviour
         stunnedStateScript = GetComponent<PlayerStunnedState>();
 
         if (spriteRenderer != null) baseColor = spriteRenderer.color;
+
+        // Auto-discover hand sprites from named children if not wired in Inspector.
+        if (pushHand == null)
+        {
+            var t = transform.Find("PushHand");
+            if (t != null) pushHand = t.GetComponent<SpriteRenderer>();
+        }
+        if (blockHand == null)
+        {
+            var t = transform.Find("BlockHand");
+            if (t != null) blockHand = t.GetComponent<SpriteRenderer>();
+        }
     }
 
     void Start() => SetState(PlayerState.Moving);
@@ -81,6 +98,7 @@ public class Player : MonoBehaviour
 
         UpdateUI();
         UpdateStateColor();
+        UpdateHands();
     }
 
     private void UpdateUI()
@@ -91,6 +109,14 @@ public class Player : MonoBehaviour
         }
     }
 
+    private void UpdateHands()
+    {
+        bool showPush  = currentState == PlayerState.Charging || currentState == PlayerState.Pushing;
+        bool showBlock = currentState == PlayerState.Blocking;
+        if (pushHand  != null) pushHand.gameObject.SetActive(showPush);
+        if (blockHand != null) blockHand.gameObject.SetActive(showBlock);
+    }
+
     private void UpdateStateColor()
     {
         if (spriteRenderer == null) return;
@@ -99,10 +125,12 @@ public class Player : MonoBehaviour
 
         if (currentState == PlayerState.Stunned)
             targetColor = Color.gray;
+        else if (currentState == PlayerState.Dodging)
+            targetColor = new Color(0.5f, 0.8f, 1f);  // blue flash while dodging
         else if (currentState == PlayerState.Charging)
-            targetColor = Color.white;  // fully charged appears bright white
-        else if (currentStamina < stats.maxStamina * 0.2f)
-            targetColor = new Color(1f, 0.5f, 0.5f);  // low stamina → red tint
+            targetColor = Color.white * 1.2f;           // bright white while charging
+        else if (stats != null && currentStamina < stats.maxStamina * 0.2f)
+            targetColor = new Color(1f, 0.5f, 0.5f);   // red tint when low stamina
         else
             targetColor = baseColor;
 

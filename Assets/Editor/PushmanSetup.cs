@@ -4,8 +4,10 @@ using UnityEditor.SceneManagement;
 using System.Collections.Generic;
 using System.IO;
 using Unity.MLAgents;
+using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 // Pushman > 1. Setup Test Scene  — builds the SampleScene from scratch
 // Pushman > 2. Save Prefabs      — bakes Arena + Player_RL prefabs from the active scene
@@ -209,7 +211,223 @@ public static class PushmanSetup
     // 4. Add UI to Player Prefab
     // -----------------------------------------------------------------------
 
-    [MenuItem("Pushman/4. Add UI to Player Prefab")]
+    // -----------------------------------------------------------------------
+    // 4. Add Sprites to Players  (circle body + hand rects + arena ring)
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/4. Add Sprites to Players")]
+    public static void AddSpritesToPlayers()
+    {
+        if (!AssetDatabase.IsValidFolder("Assets/Sprites"))
+            AssetDatabase.CreateFolder("Assets", "Sprites");
+
+        // --- Create sprite assets ---
+        Sprite circleSprite  = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png",
+                                   () => MakeCircleTexture(64));
+        Sprite pushSprite    = GetOrCreateSprite("Assets/Sprites/PushHand.png",
+                                   () => MakeRectTexture(24, 16));
+        Sprite blockSprite   = GetOrCreateSprite("Assets/Sprites/BlockShield.png",
+                                   () => MakeRectTexture(48, 10));
+        Sprite ringSprite    = GetOrCreateSprite("Assets/Sprites/ArenaBoundary.png",
+                                   () => MakeRingTexture(256, 8));
+
+        if (circleSprite == null || pushSprite == null || blockSprite == null || ringSprite == null)
+        {
+            Debug.LogError("[PushmanSetup] Failed to create one or more sprite assets.");
+            return;
+        }
+
+        // --- Wire up Player1 (green) ---
+        GameObject p1GO = GameObject.Find("Arena/Player1");
+        if (p1GO != null)
+            ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite,
+                               new Color(0.2f, 0.8f, 0.2f));  // green
+
+        // --- Wire up Player2 (red) ---
+        GameObject p2GO = GameObject.Find("Arena/Player2");
+        if (p2GO != null)
+            ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite,
+                               new Color(0.8f, 0.2f, 0.2f));  // red
+
+        // --- Arena boundary ring ---
+        GameObject arenaGO = GameObject.Find("Arena");
+        if (arenaGO != null)
+            ApplyArenaBoundary(arenaGO, ringSprite, ringOutRadius: 10f);
+
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        Debug.Log("[PushmanSetup] Sprites applied. Green=P1, Red=P2. Arena boundary ring added.");
+    }
+
+    // Assign body circle, create hand children, wire PlayerVisuals.
+    private static void ApplyPlayerSprites(GameObject playerGO, Sprite body,
+                                           Sprite pushSpr, Sprite blockSpr, Color tint)
+    {
+        // Body
+        var sr = playerGO.GetComponent<SpriteRenderer>();
+        if (sr == null) sr = playerGO.AddComponent<SpriteRenderer>();
+        sr.sprite       = body;
+        sr.color        = tint;
+        sr.sortingOrder = 0;
+
+        // Remove stale hand objects
+        DestroyChild(playerGO, "PushHand");
+        DestroyChild(playerGO, "BlockHand");
+
+        // Push hand — small fist directly in front of the player body
+        var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, tint,
+                                    localPos: new Vector3(0f, 0.72f, 0f),
+                                    localScale: new Vector3(0.35f, 0.25f, 1f),
+                                    sortOrder: 1);
+        pushHand.SetActive(false);
+
+        // Block shield — wide plate across the front
+        var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, tint * 0.75f,
+                                     localPos: new Vector3(0f, 0.55f, 0f),
+                                     localScale: new Vector3(1f, 0.15f, 1f),
+                                     sortOrder: 1);
+        blockHand.SetActive(false);
+
+        // Wire hand references directly on Player (no extra component needed).
+        var player = playerGO.GetComponent<Player>();
+        if (player != null)
+        {
+            var so = new SerializedObject(player);
+            so.FindProperty("pushHand").objectReferenceValue  = pushHand.GetComponent<SpriteRenderer>();
+            so.FindProperty("blockHand").objectReferenceValue = blockHand.GetComponent<SpriteRenderer>();
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(player);
+        }
+        EditorUtility.SetDirty(playerGO);
+    }
+
+    // Create or refresh the ring outline that marks the ring-out boundary.
+    private static void ApplyArenaBoundary(GameObject arenaGO, Sprite ring, float ringOutRadius)
+    {
+        DestroyChild(arenaGO, "ArenaBoundary");
+
+        var go = new GameObject("ArenaBoundary");
+        go.transform.SetParent(arenaGO.transform);
+        go.transform.localPosition = Vector3.zero;
+
+        // Ring texture is 256×256 px. At Unity's default 100 PPU it spans 2.56 units.
+        // Scale so it matches ringOutRadius * 2.
+        float scale = (ringOutRadius * 2f) / (256f / 100f);
+        go.transform.localScale = new Vector3(scale, scale, 1f);
+
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite       = ring;
+        sr.color        = new Color(1f, 1f, 1f, 0.45f);
+        sr.sortingOrder = -1;  // behind players
+
+        EditorUtility.SetDirty(go);
+    }
+
+    // -----------------------------------------------------------------------
+    // Sprite texture factories
+    // -----------------------------------------------------------------------
+
+    // Filled white circle on a transparent background.
+    private static Texture2D MakeCircleTexture(int size)
+    {
+        var tex    = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var pixels = new Color[size * size];
+        float c = size * 0.5f;
+        float r = c - 1f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - c, dy = y + 0.5f - c;
+                pixels[y * size + x] = (dx * dx + dy * dy <= r * r) ? Color.white : Color.clear;
+            }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    // Ring (annulus) outline on a transparent background.
+    private static Texture2D MakeRingTexture(int size, float borderPx)
+    {
+        var tex    = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var pixels = new Color[size * size];
+        float c      = size * 0.5f;
+        float outer  = c - 1f;
+        float inner  = outer - borderPx;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - c, dy = y + 0.5f - c;
+                float dSq = dx * dx + dy * dy;
+                pixels[y * size + x] =
+                    (dSq <= outer * outer && dSq >= inner * inner) ? Color.white : Color.clear;
+            }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    // Solid white rectangle.
+    private static Texture2D MakeRectTexture(int w, int h)
+    {
+        var tex    = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        var pixels = new Color[w * h];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = Color.white;
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    // Write texture to disk and import as a Sprite asset; return loaded Sprite.
+    private static Sprite GetOrCreateSprite(string assetPath, System.Func<Texture2D> makeTexture)
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+        if (existing != null) return existing;
+
+        var tex  = makeTexture();
+        var png  = tex.EncodeToPNG();
+        Object.DestroyImmediate(tex);
+        File.WriteAllBytes(assetPath, png);
+
+        AssetDatabase.ImportAsset(assetPath);
+        var imp = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+        if (imp != null)
+        {
+            imp.textureType          = TextureImporterType.Sprite;
+            imp.spriteImportMode     = SpriteImportMode.Single;
+            imp.filterMode           = FilterMode.Bilinear;
+            imp.mipmapEnabled        = false;
+            imp.alphaIsTransparency  = true;
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        return AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+    }
+
+    // -----------------------------------------------------------------------
+    // Small helpers
+    // -----------------------------------------------------------------------
+
+    private static GameObject MakeHandChild(string childName, GameObject parent,
+                                            Sprite sprite, Color color,
+                                            Vector3 localPos, Vector3 localScale, int sortOrder)
+    {
+        var go = new GameObject(childName);
+        go.transform.SetParent(parent.transform);
+        go.transform.localPosition = localPos;
+        go.transform.localScale    = localScale;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite       = sprite;
+        sr.color        = color;
+        sr.sortingOrder = sortOrder;
+        return go;
+    }
+
+    private static void DestroyChild(GameObject parent, string childName)
+    {
+        var existing = parent.transform.Find(childName);
+        if (existing != null) Object.DestroyImmediate(existing.gameObject);
+    }
+
+    [MenuItem("Pushman/4b. Add UI to Player Prefab")]
     public static void AddUIToPlayer()
     {
         GameObject p2 = GameObject.Find("Arena/Player2");
@@ -346,6 +564,9 @@ public static class PushmanSetup
         var col = go.AddComponent<CircleCollider2D>();
         col.radius = 0.5f;
 
+        // SpriteRenderer — sprite & color assigned later in AddSpritesToPlayers.
+        go.AddComponent<SpriteRenderer>();
+
         var player = go.AddComponent<Player>();
         player.stats = stats;
 
@@ -363,28 +584,17 @@ public static class PushmanSetup
     private static void ConfigureBehaviorParameters(GameObject go)
     {
         var bp = go.GetComponent<BehaviorParameters>();
+        if (bp == null) bp = go.AddComponent<BehaviorParameters>();
+
         bp.BehaviorName = "PushmanAgent";
         bp.BehaviorType = BehaviorType.HeuristicOnly;
 
-        var so = new SerializedObject(bp);
-        so.FindProperty("m_BrainParameters.m_VectorObservationSize")?.SetValue(OBS_SIZE);
-        so.FindProperty("m_BrainParameters.m_NumStackedVectorObservations")?.SetValue(1);
+        // Use direct API — avoids fragile SerializedObject property-path lookups.
+        bp.BrainParameters.VectorObservationSize        = OBS_SIZE;
+        bp.BrainParameters.NumStackedVectorObservations = 1;
+        // 4 discrete branches: move-H(3), move-V(3), rotate(3), action(4=none/push/block/dodge)
+        bp.BrainParameters.ActionSpec = ActionSpec.MakeDiscrete(3, 3, 3, 4);
 
-        var actionSpec = so.FindProperty("m_BrainParameters.m_ActionSpec");
-        if (actionSpec != null)
-        {
-            actionSpec.FindPropertyRelative("m_NumContinuousActions")?.SetValue(0);
-            var branches = actionSpec.FindPropertyRelative("m_DiscreteBranches");
-            if (branches != null)
-            {
-                branches.arraySize = 4;
-                branches.GetArrayElementAtIndex(0).intValue = 3;
-                branches.GetArrayElementAtIndex(1).intValue = 3;
-                branches.GetArrayElementAtIndex(2).intValue = 3;
-                branches.GetArrayElementAtIndex(3).intValue = 4;
-            }
-        }
-        so.ApplyModifiedProperties();
         EditorUtility.SetDirty(bp);
     }
 
@@ -475,10 +685,3 @@ public static class PushmanSetup
     }
 }
 
-internal static class SerializedPropertyExtensions
-{
-    public static void SetValue(this SerializedProperty prop, int value)
-    {
-        if (prop != null) prop.intValue = value;
-    }
-}

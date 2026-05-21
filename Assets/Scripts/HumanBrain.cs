@@ -33,9 +33,9 @@ public class HumanBrain : MonoBehaviour, IPlayerBrain
     public float GetRotationInput()
     {
         Camera cam = Camera.main;
-        if (cam == null) return 0f;
+        if (cam == null || mouse == null) return 0f;
 
-        Vector3 mouseWorld = cam.ScreenToWorldPoint(Input.mousePosition);
+        Vector3 mouseWorld = cam.ScreenToWorldPoint(mouse.position.ReadValue());
         Vector2 toMouse = (Vector2)mouseWorld - (Vector2)transform.position;
         if (toMouse.sqrMagnitude < 0.0001f) return 0f;
 
