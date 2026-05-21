@@ -101,6 +101,17 @@ public static class PushmanSetup
         EditorUtility.SetDirty(p1);
         EditorUtility.SetDirty(p2);
 
+        // Fixed orthographic camera sized to show the full arena (ring radius=10, diameter=20)
+        // plus ~2u padding each side. No follow script needed — edge awareness is the core mechanic.
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            cam.orthographic     = true;
+            cam.orthographicSize = 12f;
+            cam.transform.position = new Vector3(0f, 0f, -10f);
+            EditorUtility.SetDirty(cam);
+        }
+
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("[PushmanSetup] Test scene ready. Ctrl+S to save. " +
                   "Set Player2 > Behavior Parameters > Behavior Type to 'Default' before training.");
