@@ -15,12 +15,12 @@ MonoBehaviour:
   weight: 1
   movementSpeed: 6
   maxStamina: 100
-  staminaRegenRate: 12
-  blockStaminaUsageRate: 18
+  staminaRegenRate: 8
+  blockStaminaUsageRate: 15
   dodgeForce: 10
-  dodgeStamina: 25
+  dodgeStamina: 20
   dodgeTime: 0.25
   pushForce: 8
-  pushStamina: 20
+  pushStamina: 30
   pushChargeMultiplier: 1.5
   pushChargeTime: 1

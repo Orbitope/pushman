@@ -91,8 +91,9 @@ public class Player : MonoBehaviour
     {
         currentStateScript?.UpdateState();
 
-        if (stats != null &&
-            (currentState == PlayerState.Moving || currentState == PlayerState.Pushing || currentState == PlayerState.Stunned))
+        // Regen only while Moving — not while stunned/charging/blocking/dodging.
+        // This makes stamina feel meaningful: you must disengage to recover.
+        if (stats != null && currentState == PlayerState.Moving)
         {
             currentStamina = Mathf.Min(stats.maxStamina, currentStamina + stats.staminaRegenRate * Time.deltaTime);
         }
