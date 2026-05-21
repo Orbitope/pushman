@@ -20,6 +20,12 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/BotVsBot.unity
     guid: 08a486f0bddcb48fb98d26fc4e988278
+  - enabled: 1
+    path: Assets/Scenes/ML_Training_Mixed.unity
+    guid: 841e649d7656e404b8ee609770685182
+  - enabled: 1
+    path: Assets/Scenes/ML_Training_Scene.unity
+    guid: e8fdf468459a3429799b8c9c5e5f1bd9
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
