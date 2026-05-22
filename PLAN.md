@@ -111,10 +111,10 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
 
 **Next up → Section 4 "Model Iteration & Polish Roadmap"** (branch `feature/model-iteration`)
 - ✅ Phase 1 — Task 1a ✅ reward retune; Task 1c ✅ trained (5M steps, 53m); Task 1d ✅ ONNX integrated
-- 🔄 Phase 2 — REVISED. Old Task 2b run (`Pushman_SelfPlay_v1`, 20M) is dead: broken
-  LSTM config + architecture mismatch mean it cannot be warm-started from. Phase 2e is
-  now a fresh self-play run that supersedes 2b entirely (see Section 4). Task 2a ✅;
-  2c ✅ mixed scene exists but unused (scripted bots too weak); 2d ✅ CharacterStats obs.
+- ✅ Phase 2 — `Pushman_Master_v1` complete (20M steps, Aggressive self-play, LSTM 128/2).
+  ONNX → `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`. CharacterStats balance
+  fixed post-run: Heavyweight nerfed (pushForce 14→9, chargeMultiplier 2→1.5),
+  Speedster buffed (pushForce 5→7). Ready to warm-start Phase 3.
 - 🔄 Phase 3 — REVISED to round-robin multi-personality self-play (see Section 4).
   Task 3b ✅ 5 personality assets authored + retuned (Aggressive, Defensive, Evasive,
   Balanced, Counter — RPS-differentiated). Task 3a 🔄 partial: `dodgeHitReward` added +
