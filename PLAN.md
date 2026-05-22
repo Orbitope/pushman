@@ -121,11 +121,11 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
   ONNX → `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`. CharacterStats balance
   fixed post-run: Heavyweight nerfed (pushForce 14→9, chargeMultiplier 2→1.5),
   Speedster buffed (pushForce 5→7). Ready to warm-start Phase 3.
-- 🔄 Phase 3 — REVISED to round-robin multi-personality self-play (see Section 4).
-  Task 3b ✅ 5 personality assets authored + retuned (Aggressive, Defensive, Evasive,
-  Balanced, Counter — RPS-differentiated). Task 3a 🔄 partial: `dodgeHitReward` added +
-  wired; the 6 optional "playstyle channels" deferred (5 personalities are already
-  distinct on the core action rewards). 3c/3d/3e ❌ pending.
+- 🔄 Phase 3 — round-robin multi-personality training (see Section 4). Code + assets
+  ready: Task 3a ✅ dodge reward channels wired; Task 3b ✅ 5 RPS-differentiated
+  personalities (Aggressive, Defensive, Evasive, Balanced, Counter). Remaining, in
+  order: 3c ❌ `match_logs` path fix · 3d ❌ round-robin scene · 3e ❌ multi-behavior
+  config + train · 3f ❌ evaluate.
 - ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
 
 **Standalone Build Notes (apply after every rebuild)**
@@ -395,7 +395,7 @@ gets covered over training time.
 - DEFERRED: the 6 "playstyle channels" from the earlier plan draft (`ringOutWinBonus`,
   `comboReward`/`comboWindowSteps`, `centerControlMultiplier`, `staminaSavingReward`,
   `edgeBaitMultiplier`) are NOT needed — the 5 personalities below are already visibly
-  distinct on the 6 core action rewards. Revisit only if the 3e eval shows two
+  distinct on the 6 core action rewards. Revisit only if the 3f eval shows two
   personalities converging to the same strategy.
 
 **Task 3b — Author the 5 personality assets.** ✅ DONE 2026-05-21
@@ -429,7 +429,22 @@ Intent & expected meta (action-level RPS lifted to personality level):
 - **Counter** — harsh penalties for both taking hits (-0.25) and whiffing pushes
   (-0.10). Punishes opponent mistakes; rewards disciplined play.
 
-**Task 3c — Round-robin training scene (`Pushman/3e`).**
+**Task 3c — `match_logs` path fix (code — must precede the rebuild).**
+`MatchLogger` writes to `Directory.GetCurrentDirectory()/match_logs/`, which for a
+standalone build resolves to `builds/match_logs/`, not the project-root `match_logs/`
+that `report.py` searches. The win-rate matrix is the ONLY mid-run health signal once
+self-play ELO is gone, so this must work before Phase 3 launches.
+- [ ] In `tools/report.py`, function `newest_match_log()` — glob both locations:
+  ```python
+  files = sorted(
+      glob.glob("match_logs/*.csv") + glob.glob("builds/match_logs/*.csv"),
+      key=os.path.getmtime)
+  ```
+  (`glob` and `os` are already imported.)
+- [ ] Acceptance: `python tools/report.py --matches-only` finds the newest CSV with no
+  hand-passed path. Phase 2's logs are in `builds/match_logs/` — test against those.
+
+**Task 3d — Round-robin training scene (`Pushman/3e`).**
 - [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
   `BuildTrainingScene()` as the template.
 - [ ] DECISION (2026-05-22): include mirrors. 15 pairings total — the 10 cross
@@ -455,7 +470,7 @@ Intent & expected meta (action-level RPS lifted to personality level):
   `BehaviorParameters.BehaviorName` exactly matches a `behaviors:` key in
   `ppo_roundrobin.yaml`; all 5 personalities present; obs space logged as 18.
 
-**Task 3d — Multi-behavior config + train.**
+**Task 3e — Multi-behavior config + train.**
 - [ ] New `TrainingConfigs/ppo_roundrobin.yaml` — 5 `behaviors:` blocks, one per
   personality name. Each block MUST match the Master checkpoint exactly: `normalize:
   false`, `hidden_units: 128`, `num_layers: 2`, `memory: {sequence_length: 64,
@@ -479,7 +494,7 @@ Intent & expected meta (action-level RPS lifted to personality level):
 - [ ] Export each behavior's ONNX →
   `Assets/MLModels/[Personality]_Default/PushmanAgent.onnx`.
 
-**Task 3e — Evaluate.**
+**Task 3f — Evaluate.**
 - [ ] `python tools/report.py Pushman_RoundRobin_v1` — the personality win-rate matrix
   is the headline metric. A personality passes if it (a) wins a fair share across the
   matrix AND (b) is visibly distinct in `Pushman/5`.
@@ -536,9 +551,8 @@ parallel, e.g. between long training runs.
 1. ✅ **Phase 1** — reward retune + LSTM baseline. Done.
 2. ✅ **Phase 2** — `Pushman_Master_v1`, 20M-step Aggressive self-play. Done.
 3. **Phase 3** — round-robin (NEXT). Remaining tasks in dependency order:
-   a. Fix the `match_logs` path so `report.py` finds standalone-build logs (code change,
-      must land before the rebuild).
-   b. Task 3c — build `ML_Training_RoundRobin` scene in Unity.
-   c. Task 3d — write `ppo_roundrobin.yaml`, ONE rebuild, launch + fast-fail check.
-   d. Task 3e — evaluate the personality win-rate matrix; retune as needed.
+   a. Task 3c — `match_logs` path fix (code; must land before the rebuild).
+   b. Task 3d — build `ML_Training_RoundRobin` scene in Unity.
+   c. Task 3e — write `ppo_roundrobin.yaml`, ONE rebuild, launch + fast-fail check.
+   d. Task 3f — evaluate the personality win-rate matrix; retune as needed.
 4. **Phase 4** — visual & gameplay polish. Parallelisable; pick up between training runs.
