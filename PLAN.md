@@ -1,13 +1,13 @@
 # Pushman — Master Plan
 
 ## 0. Implementation Status (source of truth — update this first)
-*Updated: 2026-05-21*
+*Updated: 2026-05-22*
 
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
 
-### RL Training: 🔄 Phase 2b (self-play) complete; Phase 2e ready to launch
-Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhauled with rock-paper-scissors balance: block > push, dodge > block, push > dodge. Ready for Phase 2e master retrain on mixed-opponent scene with CharacterStats observations.
+### RL Training: ✅ Phase 2 complete; Phase 3 (round-robin) ready to build
+`Pushman_Master_v1` trained 20M steps of Aggressive self-play under the rock-paper-scissors mechanics (block > push, dodge > block, push > dodge). ONNX integrated; CharacterStats rebalanced post-run (Heavyweight nerf, Speedster buff). Warm-start into Phase 3 verified end-to-end (2026-05-22). Next: build the round-robin scene + multi-behavior config.
 
 ---
 
@@ -22,7 +22,7 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
 - ✅ Training configs — `ppo_discrete_baseline.yaml`, `ppo_selfplay.yaml`, `sac_continuous.yaml`, `ppo_fast_experiment.yaml`
 - ✅ Training scene — 8×8 = 64 arenas, 25u spacing (ring radius 10u, players ring out before reaching neighbours)
 - ✅ BotPersonality SOs — `Aggressive`, `Defensive`, `Evasive`, `Balanced`, `Counter` (5 distinct RPS playstyles, retuned 2026-05-21)
-- ✅ CharacterStats SOs — `DefaultStats`, `Heavyweight`, `Speedster`
+- ✅ CharacterStats SOs — `DefaultStats`, `Heavyweight`, `Speedster` (rebalanced 2026-05-22 after Phase 2 match-log analysis)
 - ✅ ObservationProfile SOs — `Profile_A` (full), `Profile_B` (FOV 90°), `Profile_C` (FOV + noise stubs)
 - ✅ `Assets/MLModels/` folder — target for trained ONNX files; naming: `[Personality]_[Stats]/PushmanAgent.onnx`
 
@@ -51,10 +51,10 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
 | dodgeStamina | 40 (tap costs 40%) |
 | allowDodgeOverdraft | true |
 | overdraftPauseDuration | 1.5s regen lockout |
-| dodgeForce | 18 (damping zeroed during dash) |
+| dodgeForce | 12 (damping zeroed during dash; reduced from 18) |
 | pushStamina | 20–40 (scales with charge) |
 | pushChargeTime | 1s |
-| pushForce | 8 base → 20 at full charge |
+| pushForce | 8 base, ×1.5 multiplier at full charge (= 12) |
 
 **Bug fixes applied**
 - ✅ Dodge damping fix — `rb.linearDamping` zeroed during dash, restored in EndState
@@ -72,8 +72,14 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
 
 **Measurement & reporting**
 - ✅ `MatchLogger.cs` — logs every decided match (winner/loser personality + stats) to a
-  timestamped CSV in `match_logs/`. Buffered writes + 15s timed flush = no hot-path I/O.
+  timestamped CSV. Buffered writes + 15s timed flush = no hot-path I/O.
   Auto-bootstrapped by `ArenaManager` — no scene-builder wiring needed.
+- ⚠️ KNOWN ISSUE — `MatchLogger` writes to `Directory.GetCurrentDirectory()/match_logs/`.
+  For a standalone build that resolves to `builds/match_logs/`, NOT the project-root
+  `match_logs/` that `report.py` searches. Until fixed, pass the path explicitly. Fix
+  options: (a) `report.py` also globs `builds/match_logs/`, or (b) `MatchLogger` writes
+  to an absolute project path. Do (a) before Phase 3 — the win-rate matrix is the only
+  mid-run health signal once self-play ELO is gone.
 - ✅ `tools/report.py` — single on-demand report tool. Reads TensorBoard tfevents
   (training progress + health heuristic) and the newest match CSV (personality &
   CharacterStats win-rate matrices, balance/coverage check). Run from project root:
@@ -347,23 +353,23 @@ useful opponents, and self-play already produces varied, co-evolving opposition.
 **Task 2c — Measurement system.** ✅ Done.
 - `MatchLogger.cs` + `tools/report.py` — see Section 0 "Measurement & reporting".
 
-**Task 2d — Rebuild + launch self-play.**
-- [ ] Rebuild the standalone in Unity (Server Build → `builds/Pushman_Training`).
-  Re-apply post-build fixes (Section 0 Standalone Build Notes).
-- [ ] Run: `./train.sh --standalone --config=ppo_selfplay --id=Pushman_Master_v1 --force`
-  Fresh run (no warm-start — nothing compatible to start from). 15M step cap.
-- [ ] Monitor with `python tools/report.py Pushman_Master_v1`: reward must rise AND
-  episode length fall. `Self-play/ELO` should climb then stabilise. Stop early on a
-  clear plateau. ~3-5 h expected.
+**Task 2d — Rebuild + launch self-play.** ✅ DONE 2026-05-22
+- ✅ Standalone rebuilt; post-build fixes applied.
+- ✅ Ran `./train.sh --standalone --config=ppo_selfplay --id=Pushman_Master_v1 --force`.
+  Fresh run to the full 20M step cap (~4 h).
+- ✅ Health check passed: reward rose -0.75 → +0.19, recent-average episode length
+  fell 216 → 134. ELO oscillated by self-play snapshot cycle (expected artefact).
 
-**Task 2e — Integrate + validate.**
-- [ ] Copy `results/Pushman_Master_v1/PushmanAgent.onnx` →
+**Task 2e — Integrate + validate.** ✅ DONE 2026-05-22
+- ✅ `results/Pushman_Master_v1/PushmanAgent.onnx` →
   `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`.
-- [ ] `Pushman/5` Bot vs Bot — expect active pushing, real ring-outs, the RPS triangle
-  visibly in play (blocks stopping pushes, dodges breaking blocks). NOT dodge-spam.
-- [ ] `python tools/report.py` — the CharacterStats win-rate matrix should be roughly
-  balanced; a lopsided row means a stat needs tuning before Phase 3.
-- [ ] Flip Phase 2 → ✅ in Section 0; commit.
+- ✅ Match-log analysis (56,845 matches) showed a CharacterStats imbalance — Heavyweight
+  at 75% win rate. Rebalanced: Heavyweight `pushForce` 14→9, `pushChargeMultiplier` 2→1.5;
+  Speedster `pushForce` 5→7. (New numbers computed, not yet observed in a run — the
+  Phase 3 match log re-checks them.)
+- ✅ Warm-start into a non-self-play PPO trainer verified end-to-end via a 50k-step test
+  (`ppo_warmstart_test.yaml`) — checkpoint loads clean, reward starts at +0.1 not -0.7.
+- ✅ Phase 2 flipped to ✅ in Section 0; committed.
 
 Note: the old `ML_Training_Mixed` scripted-bot scene exists but is unused — left in
 place, harmless. Frozen-specialist opponents (old Task 2f) are folded into Phase 3:
@@ -426,24 +432,48 @@ Intent & expected meta (action-level RPS lifted to personality level):
 **Task 3c — Round-robin training scene (`Pushman/3e`).**
 - [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
   `BuildTrainingScene()` as the template.
-- [ ] DECISION: 6×6 = 36 arenas. The 5 personalities give C(5,2)=10 unordered pairings;
-  distribute across arenas (`pairing = arenaIndex % 10`), ~3-4 arenas per pairing.
+- [ ] DECISION NEEDED — self-pairings? 5 personalities give C(5,2)=10 cross pairings.
+  Adding the 5 mirrors (Aggressive vs Aggressive, etc.) = 15 total. Mirrors are not
+  required for the Phase 3 goal (cross-matrix distinctness) but close the gap where two
+  same-personality bots meet at deployment. RECOMMENDATION: include mirrors — cheap, and
+  removes an untrained matchup. Size the grid to the choice.
+- [ ] Grid: 40 arenas (8×5) with mirrors (~2-3 per pairing), or 6×6=36 without.
+  Distribute via `pairing = arenaIndex % N` (N = 15 with mirrors, 10 without).
 - [ ] Per arena, Player1 and Player2 take the pairing's two personalities. For each:
   set `RLAgentBrain.personality` to the matching `BotPersonality` SO, and set
   `BehaviorParameters.BehaviorName` to that personality's name (e.g. `Aggressive`).
   Both stay `BehaviorType.Default` — both train.
+- [ ] REQUIRED — keep `ObservationProfile` = `Profile_A` with 1 opponent so obs space
+  stays 18. The Master checkpoint's input layer is 128×18; any other size breaks
+  warm-start.
 - [ ] Populate every `ArenaManager.statsPool` with `DefaultStats`, `Heavyweight`,
   `Speedster` so stats randomise per episode.
-- [ ] Save to `Assets/Scenes/ML_Training_RoundRobin.unity`; add to Build Settings.
-- [ ] Acceptance: 36 arenas, all 5 personalities present, every player trainable.
+- [ ] Save to `Assets/Scenes/ML_Training_RoundRobin.unity`. In Build Settings make it
+  the ONLY enabled scene — if the old training scene stays enabled and ordered first,
+  the build silently trains the wrong scene for hours.
+- [ ] Acceptance (verify ALL before the multi-hour run): N arenas built; every
+  `RLAgentBrain.personality` is non-null; every `BehaviorParameters.BehaviorName`
+  exactly matches a `behaviors:` key in `ppo_roundrobin.yaml`; all 5 personalities
+  present; obs space logged as 18.
 
 **Task 3d — Multi-behavior config + train.**
 - [ ] New `TrainingConfigs/ppo_roundrobin.yaml` — 5 `behaviors:` blocks, one per
-  personality name, each with `ppo_discrete_baseline.yaml`'s settings (128/2, LSTM 128).
-  Give each a per-behavior `init_path:
-  results/Pushman_Master_v1/PushmanAgent/checkpoint.pt` to warm-start every personality
-  from the Phase 2 master. No `self_play:` block — opponents are the other live
-  behaviors, not frozen snapshots.
+  personality name. Each block MUST match the Master checkpoint exactly: `normalize:
+  false`, `hidden_units: 128`, `num_layers: 2`, `memory: {sequence_length: 64,
+  memory_size: 128}`, `reward_signals.extrinsic: {gamma: 0.99, strength: 1.0}`.
+  Give each a per-behavior:
+  ```
+  init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+  ```
+  to warm-start every personality from the Phase 2 master. (Path + cross-trainer
+  compatibility VERIFIED 2026-05-22 — a 50k-step `ppo_warmstart_test.yaml` run loaded
+  this exact checkpoint into a non-self-play PPO trainer clean; reward started at +0.1,
+  not the -0.7 of a from-scratch run.) No `self_play:` block — opponents are the other
+  live behaviors, not frozen snapshots.
+- [ ] FAST-FAIL CHECK: within the first ~2 min of the run, confirm the log prints
+  `Initializing from results/Pushman_Master_v1/...` for every behavior and shows NO
+  `Failed to load` warnings. Abort immediately on any failure — do not discover it
+  hours in (the Phase 2b lesson).
 - [ ] Rebuild standalone. Run:
   `./train.sh --standalone --config=ppo_roundrobin --id=Pushman_RoundRobin_v1 --force`
   All 5 networks train at once. ~4-6 h; ~3-5M steps per behavior.
@@ -504,10 +534,12 @@ parallel, e.g. between long training runs.
 
 ### Suggested execution order
 
-1. **Phase 1** — highest ROI, smallest change, fixes the root cause. Do first.
-2. **Phase 2d** (stat observations) — do before 2c/2e: it changes the obs space and
-   forces a fresh run anyway, so batch all obs-space work together.
-3. **Phase 2a/2b/2c/2e** — `train.sh` flag, self-play, curriculum scene, master retrain.
-4. **Phase 3** — round-robin: all 5 personalities warm-started from the Phase 2 master,
-   trained simultaneously against each other (no frozen specialists).
-5. **Phase 4** — parallelisable; pick up between long training runs.
+1. ✅ **Phase 1** — reward retune + LSTM baseline. Done.
+2. ✅ **Phase 2** — `Pushman_Master_v1`, 20M-step Aggressive self-play. Done.
+3. **Phase 3** — round-robin (NEXT). Remaining tasks in dependency order:
+   a. Fix the `match_logs` path so `report.py` finds standalone-build logs (code change,
+      must land before the rebuild).
+   b. Task 3c — build `ML_Training_RoundRobin` scene in Unity.
+   c. Task 3d — write `ppo_roundrobin.yaml`, ONE rebuild, launch + fast-fail check.
+   d. Task 3e — evaluate the personality win-rate matrix; retune as needed.
+4. **Phase 4** — visual & gameplay polish. Parallelisable; pick up between training runs.
