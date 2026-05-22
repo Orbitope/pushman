@@ -20,7 +20,7 @@ MonoBehaviour:
   dodgeForce: 14
   dodgeStamina: 50
   dodgeTime: 0.2
-  pushForce: 14
+  pushForce: 9
   pushStamina: 30
-  pushChargeMultiplier: 2
+  pushChargeMultiplier: 1.5
   pushChargeTime: 1.2
