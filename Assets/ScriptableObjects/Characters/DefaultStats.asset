@@ -17,7 +17,11 @@ MonoBehaviour:
   maxStamina: 100
   staminaRegenRate: 8
   blockStaminaUsageRate: 15
-  dodgeForce: 18
+  regenBoostThreshold: 0.75
+  regenBoostMultiplier: 2.5
+  allowDodgeOverdraft: 1
+  overdraftPauseDuration: 1.5
+  dodgeForce: 12
   dodgeStamina: 40
   dodgeTime: 0.25
   pushForce: 8

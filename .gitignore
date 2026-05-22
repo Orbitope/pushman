@@ -108,3 +108,6 @@ venv-mlagents/
 
 # macOS finder metadata
 .DS_Store
+
+# Match-outcome CSVs from training runs
+/match_logs/

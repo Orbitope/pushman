@@ -187,11 +187,10 @@ public class Player : MonoBehaviour
 
             if (blocked)
             {
-                other.SetState(PlayerState.Moving); // break the block
+                // Block prevents the push — blocker stays in Blocking state
                 otherRL?.AddSuccessfulBlockReward();
                 myRL?.AddPushBlockedReward();
-                Stun(0.5f);                          // pusher staggered
-                ApplyImpulse(-pushDir * strength);
+                Stun(0.2f);                          // pusher recovery frames (push stopped by block)
             }
             else
             {
@@ -239,6 +238,18 @@ public class Player : MonoBehaviour
                 ApplyImpulse(dir * stats.dodgeForce);
                 other.ApplyImpulse(-dir * other.stats.dodgeForce);
             }
+        }
+        else if (other.currentState == PlayerState.Blocking && other.IsFacing(this))
+        {
+            // Dodge breaks block
+            other.SetState(PlayerState.Moving);
+            RLAgentBrain otherRL = other.Brain as RLAgentBrain;
+            RLAgentBrain myRL = Brain as RLAgentBrain;
+            otherRL?.AddPushBlockedReward();  // blocker penalized
+            myRL?.AddDodgeEvasionReward();    // dodger rewarded for breaking block
+            SetVelocity(Vector2.zero);
+            SetState(PlayerState.Moving);
+            other.Stun(0.3f);
         }
         else
         {

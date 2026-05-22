@@ -13,6 +13,10 @@ public class BotPersonality : ScriptableObject
     public float successfulBlock = 0.05f;
     public float pushBlocked = -0.05f;
 
+    [Tooltip("Reward when agent dodges and opponent was attacking (in Pushing state). " +
+             "Prevents reward from dodge spam vs standing opponent. Suggested: 0.05-0.15")]
+    public float dodgeEvasionReward = 0.05f;
+
     [Header("Positioning & Tactics (Continuous / Per Step)")]
     [Tooltip("Reward for facing the opponent. Mild nudge toward engagement. Suggested: 0.0001")]
     public float facingOpponentMultiplier = 0.0001f;

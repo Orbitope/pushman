@@ -14,10 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BotPersonality
   winRound: 1.5
   loseRound: -1.5
-  landPushHit: 0.2
+  landPushHit: 0.35
   takePushHit: -0.2
   successfulBlock: 0.05
-  pushBlocked: -0.05
+  pushBlocked: -0.02
+  dodgeEvasionReward: 0.1
   facingOpponentMultiplier: 0.0001
   wastedStaminaMultiplier: -0.05
   opponentEdgePressureMultiplier: 0.0004

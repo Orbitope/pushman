@@ -251,6 +251,7 @@ public class RLAgentBrain : Agent, IPlayerBrain
     public void AddTakeHitReward() { if (personality) AddReward(personality.takePushHit); }
     public void AddSuccessfulBlockReward() { if (personality) AddReward(personality.successfulBlock); }
     public void AddPushBlockedReward() { if (personality) AddReward(personality.pushBlocked); }
+    public void AddDodgeEvasionReward() { if (personality) AddReward(personality.dodgeEvasionReward); }
     public void AddWastedStaminaPenalty(float amount) { if (personality) AddReward(amount * personality.wastedStaminaMultiplier); }
 
     public Vector2 GetMovement() => Vector2.ClampMagnitude(currentMovement, 1f);

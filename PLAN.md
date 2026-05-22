@@ -6,8 +6,8 @@
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
 
-### RL Training: ✅ Code complete, assets ready, not yet trained
-All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject assets created. No runs have been executed yet.
+### RL Training: 🔄 Phase 2b (self-play) complete; Phase 2e ready to launch
+Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhauled with rock-paper-scissors balance: block > push, dodge > block, push > dodge. Ready for Phase 2e master retrain on mixed-opponent scene with CharacterStats observations.
 
 ---
 
@@ -65,6 +65,19 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 - ✅ Observation space — `PushmanSetup` uses `profile.ComputeSpaceSize()` instead of hardcoded constant
 - ✅ `CharacterStats.cs` field defaults synced to match `DefaultStats.asset`
 - ✅ `Image.Type.Filled` sprite fix — fill images now have `StaminaBar.png` assigned; `fillAmount` was silently ignored without a sprite
+- ✅ LSTM config fix — `use_recurrent: true` is mlagents 0.x syntax, silently ignored by
+  1.1.0 (so NO prior run used LSTM). Both `ppo_discrete_baseline.yaml` and
+  `ppo_selfplay.yaml` now use the nested `memory:` block. Architectures standardized to
+  128 hidden / 2 layers / memory 128 so runs can warm-start from each other.
+
+**Measurement & reporting**
+- ✅ `MatchLogger.cs` — logs every decided match (winner/loser personality + stats) to a
+  timestamped CSV in `match_logs/`. Buffered writes + 15s timed flush = no hot-path I/O.
+  Auto-bootstrapped by `ArenaManager` — no scene-builder wiring needed.
+- ✅ `tools/report.py` — single on-demand report tool. Reads TensorBoard tfevents
+  (training progress + health heuristic) and the newest match CSV (personality &
+  CharacterStats win-rate matrices, balance/coverage check). Run from project root:
+  `python tools/report.py [run_id]`. Zero added training overhead.
 
 **Design decisions locked in**
 - Dodge bypasses block (intentional — dodge is the counter to block)
@@ -98,7 +111,11 @@ All ML-Agents infrastructure is wired. Training configs exist. ScriptableObject 
 
 **Next up → Section 4 "Model Iteration & Polish Roadmap"** (branch `feature/model-iteration`)
 - ✅ Phase 1 — Task 1a ✅ reward retune; Task 1c ✅ trained (5M steps, 53m); Task 1d ✅ ONNX integrated
-- 🔄 Phase 2 — Task 2a ✅ --init-from; Task 2b 🔄 self-play training live (20M steps, ~6-10h); Task 2c ✅ mixed scene; Task 2d ✅ CharacterStats obs
+- 🔄 Phase 2 — REVISED. Old Task 2b run (`Pushman_SelfPlay_v1`, 20M) is dead: broken
+  LSTM config + architecture mismatch mean it cannot be warm-started from. Phase 2e is
+  now a fresh self-play run that supersedes 2b entirely (see Section 4). Task 2a ✅;
+  2c ✅ mixed scene exists but unused (scripted bots too weak); 2d ✅ CharacterStats obs.
+- ❌ Phase 3 — REVISED to round-robin multi-personality self-play (see Section 4).
 - ❌ Phase 3 — reward shaping for distinct playstyles
 - ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
 
@@ -273,9 +290,10 @@ Effort: ~30 min setup + ~2-3 h unattended training.
 - [ ] Reward-budget check: dense per-step shaping over a full 5000-step episode must
   stay ≈ ±0.5; terminal win/loss is ±1.5.
 
-**Task 1b — LSTM baseline config.** No work — `ppo_discrete_baseline.yaml` already has
-`use_recurrent: true`, 128 hidden, memory 128, 5M steps. Just confirm it is unchanged.
-("Reimplement LSTM" = the config exists; the fast experiment never used it.)
+**Task 1b — LSTM baseline config.** ✅ Fixed (2026-05-21) — `ppo_discrete_baseline.yaml`
+originally used the mlagents 0.x `use_recurrent: true` syntax, which 1.1.0 silently
+ignores, so NO run before Phase 2 actually used LSTM. Now uses the nested `memory:`
+block (128 hidden, 2 layers, memory 128). Same fix applied to `ppo_selfplay.yaml`.
 
 **Task 1c — Rebuild + train.**
 - [ ] Reward asset values changed ⇒ rebuild the standalone in Unity
@@ -296,87 +314,75 @@ Effort: ~30 min setup + ~2-3 h unattended training.
 
 ---
 
-### Phase 2 — Self-play + multi-opponent curriculum (one master network)
+### Phase 2 — Self-play master (REVISED 2026-05-21)
 
-Goal: one `PushmanAgent` network that beats varied opponents and adapts to any
-`CharacterStats`. Only the master trains; opponents are frozen or scripted.
+Goal: one competent `PushmanAgent` network, trained by self-play under the corrected
+game mechanics, that generalises across all `CharacterStats`. This supersedes the
+original "self-play + scripted curriculum" plan — scripted bots proved too weak to be
+useful opponents, and self-play already produces varied, co-evolving opposition.
 
-**Task 2a — Add `--init-from` to `train.sh`.**
-- [ ] `train.sh` has no warm-start flag. Add `--init-from=RUN_ID` that appends
-  `--initialize-from=RUN_ID` to the `mlagents-learn` command. Needed by 2e and Phase 3.
+**Context — why the original Phase 2 was scrapped.**
+- The first self-play run (`Pushman_SelfPlay_v1`, 20M steps) is dead weight: the
+  `use_recurrent: true` syntax was mlagents 0.x and silently ignored, so it never used
+  LSTM; its config also used a 256/3 architecture. Nothing can warm-start from it.
+- It also trained under broken mechanics (blocks didn't stop pushes) and converged on
+  dodge-spam. Both the mechanics and the reward scaling have since been fixed.
+- Net: Phase 2 restarts fresh. The only salvage is the playtest insight that drove the
+  rock-paper-scissors mechanics rework.
 
-**Task 2b — Self-play run.**
-- [ ] `ppo_selfplay.yaml` already has the `self_play:` block (ELO, snapshots, window 10).
-- [ ] Run warm-started from Phase 1:
-  `./train.sh --standalone --config=ppo_selfplay --id=Pushman_SelfPlay_v1 --init-from=Pushman_Bot_v2`
-- [ ] Monitor TensorBoard `Self-play/ELO` — must climb steadily. Flat ELO = policy not
-  improving vs itself → revisit reward shaping. ~6-10 h (20M cap); stop early on plateau.
+**Task 2a — `--init-from` in `train.sh`.** ✅ Done.
 
-**Task 2c — Scripted-opponent curriculum scene (`Pushman/3c`).**
-Purpose: expose the master to the hand-coded bots — free, varied, deterministic
-opponents that stop self-play overfitting to a single style.
-- [ ] Add `Pushman/3c. Build Mixed-Opponent Training Scene` to `PushmanSetup.cs`;
-  use `BuildTrainingScene()` as the template.
-- [ ] DECISION: 6×6 = 36 arenas (divisible by 3). For each arena instance:
-  - Player1 = master `RLAgentBrain`, `BehaviorType.Default` — the only thing that trains.
-  - Player2 = scripted bot by `arenaIndex % 3`: 0 → `ChaseBotBrain`, 1 →
-    `StandingBotBrain`, 2 → `DodgingBotBrain`. Remove Player2's `RLAgentBrain` +
-    `BehaviorParameters` + `DecisionRequester` first (copy the removal order from
-    `SetupBotTestScene`), then add the scripted brain.
-  - `ArenaManager.allPlayers` still lists both; `RegisterWin/Loss` only fire on
-    `RLAgentBrain`, so only the master gets rewards — no `ArenaManager` change needed.
-- [ ] Save to `Assets/Scenes/ML_Training_Mixed.unity`; add to Build Settings.
-- [ ] Acceptance: open the scene, confirm 36 arenas, each Player2 a scripted brain,
-  each Player1 an `RLAgentBrain` with `BehaviorType.Default`.
+**Task 2b — Config + mechanics fixes.** ✅ Done.
+- LSTM enabled for real — nested `memory:` block in both `ppo_discrete_baseline.yaml`
+  and `ppo_selfplay.yaml`; architectures standardised to 128 hidden / 2 layers /
+  memory 128 so every run can warm-start from every other.
+- Rock-paper-scissors mechanics: block prevents push, dodge breaks block, push beats
+  dodge. Dodge forces reduced (Default 12, Speedster 16). Aggressive rewards retuned.
+- CharacterStats self-observation already wired (obs space 18); `statsPool` randomises
+  stats per episode so one network generalises across Default/Heavyweight/Speedster.
 
-**Task 2d — Self-observed `CharacterStats` (CODE CHANGE — enables "one network plays
-any character").** The agent does not currently observe its own stats, so a DefaultStats
-model will not transfer to Heavyweight/Speedster.
-- [ ] `Assets/Scripts/ObservationProfile.cs`: add `public bool selfStats = true;` and
-  `public bool opponentStats = false;`. Update `ComputeSpaceSize(oppCount)`: `+5` when
-  `selfStats`, `+5 * oppCount` when `opponentStats`.
-- [ ] `Assets/Scripts/RLAgentBrain.cs` `CollectObservations`: after the `SelfState`
-  block add a `SelfStats` block — 5 normalized floats:
-  `weight/3f, movementSpeed/12f, pushForce/25f, dodgeForce/30f, maxStamina/150f`
-  (norm constants chosen so Default/Heavyweight/Speedster all land in ~0-1). Add an
-  `OpponentStats` block (same 5 fields) inside the opponent loop behind the flag, with
-  zero-padding for null/invisible opponents (match the existing pad logic).
-- [ ] `Assets/Scripts/ArenaManager.cs`: add `public List<CharacterStats> statsPool;`.
-  In `ResetAllPlayers()`, if `statsPool` is non-empty assign each player a random entry
-  (`p.stats = statsPool[Random.Range(0, statsPool.Count)]`). Empty pool = fixed stats.
-- [ ] `Assets/Editor/PushmanSetup.cs`: when building training scenes, populate each
-  `ArenaManager.statsPool` with `DefaultStats`, `Heavyweight`, `Speedster`.
-- [ ] `ConfigureBehaviorParameters` already derives the obs size from
-  `profile.ComputeSpaceSize` — verify it picks up the new size (Profile A: 13 → 18).
-- [ ] This INVALIDATES the old obs space ⇒ a fresh run, not a resume. Rebuild scenes
-  (`Pushman/3`, `3c`) and the standalone.
+**Task 2c — Measurement system.** ✅ Done.
+- `MatchLogger.cs` + `tools/report.py` — see Section 0 "Measurement & reporting".
 
-**Task 2e — Master retrain (stats + curriculum).**
-- [ ] Fresh run (obs space changed): `ppo_discrete_baseline.yaml` on `ML_Training_Mixed`
-  with `statsPool` populated. Run id `Pushman_Master_v1`.
-- [ ] Self-play polish: `ppo_selfplay.yaml --init-from=Pushman_Master_v1`,
-  id `Pushman_Master_SelfPlay_v1`.
-- [ ] Validate in `Pushman/5`: master plays competently as Default, Heavyweight, AND
-  Speedster (swap each player's `CharacterStats`).
+**Task 2d — Rebuild + launch self-play.**
+- [ ] Rebuild the standalone in Unity (Server Build → `builds/Pushman_Training`).
+  Re-apply post-build fixes (Section 0 Standalone Build Notes).
+- [ ] Run: `./train.sh --standalone --config=ppo_selfplay --id=Pushman_Master_v1 --force`
+  Fresh run (no warm-start — nothing compatible to start from). 15M step cap.
+- [ ] Monitor with `python tools/report.py Pushman_Master_v1`: reward must rise AND
+  episode length fall. `Self-play/ELO` should climb then stabilise. Stop early on a
+  clear plateau. ~3-5 h expected.
 
-**Task 2f — Frozen-specialist opponents (after Phase 3).** Once Phase 3 specialists
-exist, build a scene where Player2 = `RLAgentBrain`, `BehaviorType.InferenceOnly`, with a
-specialist ONNX; Player1 = master, `Default`, trains. This is the literal form of
-"train against different playstyles, only train the main one."
+**Task 2e — Integrate + validate.**
+- [ ] Copy `results/Pushman_Master_v1/PushmanAgent.onnx` →
+  `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`.
+- [ ] `Pushman/5` Bot vs Bot — expect active pushing, real ring-outs, the RPS triangle
+  visibly in play (blocks stopping pushes, dodges breaking blocks). NOT dodge-spam.
+- [ ] `python tools/report.py` — the CharacterStats win-rate matrix should be roughly
+  balanced; a lopsided row means a stat needs tuning before Phase 3.
+- [ ] Flip Phase 2 → ✅ in Section 0; commit.
+
+Note: the old `ML_Training_Mixed` scripted-bot scene exists but is unused — left in
+place, harmless. Frozen-specialist opponents (old Task 2f) are folded into Phase 3:
+the round-robin already makes every personality face every other.
 
 ---
 
-### Phase 3 — Reward shaping for distinct, effective playstyles
+### Phase 3 — Round-robin multi-personality training (REVISED 2026-05-21)
 
-Goal: 5 visibly-distinct, competitive personalities — all the SAME master architecture,
-only the `BotPersonality` reward asset differs.
+Goal: 5 visibly-distinct, competitive personalities — same architecture, only the
+`BotPersonality` reward asset differs. REVISED from "master then isolated specialists":
+instead, all 5 personalities train **simultaneously against each other** in one
+multi-behavior run. Each learns to beat every other style, not just a mirror of itself.
+Stats randomise per episode (`statsPool`), so the full (personality × stats) permutation
+gets covered over training time.
 
 **Task 3a — New reward channels (CODE CHANGE).**
-- [ ] `Assets/Scripts/BotPersonality.cs` — add fields:
+- [ ] `Assets/Scripts/BotPersonality.cs` — add fields (`dodgeEvasionReward` already
+  exists from the Phase 2 mechanics work — keep it, do not re-add):
   ```
   [Header("Playstyle Channels")]
   public float ringOutWinBonus = 0f;        // extra reward when the win is a ring-out
-  public float dodgeEvasionReward = 0f;     // opponent push whiffed while we dodged
   public float comboReward = 0f;            // hit landed within comboWindowSteps of a dodge
   public int   comboWindowSteps = 30;
   public float centerControlMultiplier = 0f;// per-step, reward for being near center
@@ -393,12 +399,11 @@ only the `BotPersonality` reward asset differs.
     `stepsSinceDodge < personality.comboWindowSteps` also add `personality.comboReward`.
   - `centerControlMultiplier`: in `FixedUpdate`, add `(1 - selfDist/radius) * centerControlMultiplier`.
   - `edgeBaitMultiplier`: in `FixedUpdate`, add `(selfDist/radius) * edgeBaitMultiplier`.
-  - `dodgeEvasionReward`: add an `AddDodgeEvasionReward()` method. In `PlayerPushingState`
-    (where a push resolves its hit), when the target is in `Dodging` state and so takes
-    no hit, call `(target.Brain as RLAgentBrain)?.AddDodgeEvasionReward()`.
+  - `dodgeEvasionReward`: ✅ already wired — `AddDodgeEvasionReward()` exists and is
+    called from `Player.HandleDodgeCollision` when a dodge breaks a block.
 
 **Task 3b — Author the 5 personality assets** (`Assets/ScriptableObjects/Personalities/`).
-Starting values — tune after the 3d eval:
+Starting values — tune after the 3e eval:
 
 | Field | Aggressive | Defensive | Rusher | Balanced | Trickster |
 |---|---|---|---|---|---|
@@ -422,17 +427,39 @@ Starting values — tune after the 3d eval:
 Intent: Aggressive = relentless pressure · Defensive = patient blocking wall · Rusher =
 reckless all-in · Balanced = well-rounded · Trickster = dodge-bait-punish.
 
-**Task 3c — Train specialists.**
-- [ ] For each non-Aggressive personality, train ~2-3M steps warm-started from the
-  Phase 2 master: `--init-from=Pushman_Master_v1` (they specialize, not relearn basics).
-  Swap the wired `BotPersonality` asset before building the training scene, or add a
-  personality parameter to the `Pushman/3` builder.
-- [ ] Export each ONNX → `Assets/MLModels/[Personality]_Default/PushmanAgent.onnx`.
+**Task 3c — Round-robin training scene (`Pushman/3e`).**
+- [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
+  `BuildTrainingScene()` as the template.
+- [ ] DECISION: 6×6 = 36 arenas. The 5 personalities give C(5,2)=10 unordered pairings;
+  distribute across arenas (`pairing = arenaIndex % 10`), ~3-4 arenas per pairing.
+- [ ] Per arena, Player1 and Player2 take the pairing's two personalities. For each:
+  set `RLAgentBrain.personality` to the matching `BotPersonality` SO, and set
+  `BehaviorParameters.BehaviorName` to that personality's name (e.g. `Aggressive`).
+  Both stay `BehaviorType.Default` — both train.
+- [ ] Populate every `ArenaManager.statsPool` with `DefaultStats`, `Heavyweight`,
+  `Speedster` so stats randomise per episode.
+- [ ] Save to `Assets/Scenes/ML_Training_RoundRobin.unity`; add to Build Settings.
+- [ ] Acceptance: 36 arenas, all 5 personalities present, every player trainable.
 
-**Task 3d — Evaluate.**
-- [ ] Round-robin in `Pushman/5` (swap each player's ONNX + `BotPersonality`).
-- [ ] A personality passes if it (a) wins a fair share AND (b) is visibly distinct on
-  screen. Re-tune the 3b table and retrain any that fail.
+**Task 3d — Multi-behavior config + train.**
+- [ ] New `TrainingConfigs/ppo_roundrobin.yaml` — 5 `behaviors:` blocks, one per
+  personality name, each with `ppo_discrete_baseline.yaml`'s settings (128/2, LSTM 128).
+  Give each a per-behavior `init_path:
+  results/Pushman_Master_v1/PushmanAgent/checkpoint.pt` to warm-start every personality
+  from the Phase 2 master. No `self_play:` block — opponents are the other live
+  behaviors, not frozen snapshots.
+- [ ] Rebuild standalone. Run:
+  `./train.sh --standalone --config=ppo_roundrobin --id=Pushman_RoundRobin_v1 --force`
+  All 5 networks train at once. ~4-6 h; ~3-5M steps per behavior.
+- [ ] Export each behavior's ONNX →
+  `Assets/MLModels/[Personality]_Default/PushmanAgent.onnx`.
+
+**Task 3e — Evaluate.**
+- [ ] `python tools/report.py Pushman_RoundRobin_v1` — the personality win-rate matrix
+  is the headline metric. A personality passes if it (a) wins a fair share across the
+  matrix AND (b) is visibly distinct in `Pushman/5`.
+- [ ] Re-tune the 3b reward table and retrain any personality that is dominated or
+  visually indistinct.
 
 ---
 
