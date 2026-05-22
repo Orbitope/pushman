@@ -133,18 +133,21 @@ public class Player : MonoBehaviour
     {
         if (spriteRenderer == null) return;
 
-        Color targetColor = baseColor;
+        Color targetColor;
 
         if (currentState == PlayerState.Stunned)
             targetColor = Color.gray;
         else if (currentState == PlayerState.Dodging)
-            targetColor = new Color(0.5f, 0.8f, 1f);  // blue flash while dodging
+            targetColor = new Color(0.25f, 0.55f, 1f);                              // vivid blue dash
+        else if (currentState == PlayerState.Blocking)
+            targetColor = Color.Lerp(baseColor, new Color(0.4f, 0.85f, 1f), 0.55f); // cyan tint, keeps P1/P2 hue
         else if (currentState == PlayerState.Charging)
-            targetColor = Color.white * 1.2f;           // bright white while charging
+            targetColor = Color.white * 1.2f;                                       // bright white glow
         else
             targetColor = baseColor;
 
-        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 5f);
+        // 8/s lerp — fast enough that even a 0.25s dodge visibly registers.
+        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 8f);
     }
 
     public void SetState(PlayerState newState)

@@ -665,17 +665,19 @@ public static class PushmanSetup
         DestroyChild(playerGO, "StaminaBarFill");
         DestroyChild(playerGO, "StaminaCanvas");
 
-        // Push hand — bright white fist in front of the player so it contrasts against the colored body
+        // Push hand — large bright-white fist held in front; size makes the attack read clearly
+        // from the static camera. (Sprite native 0.24×0.16u → ×1.6 = 0.38×0.26u vs 0.64u body.)
         var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, Color.white,
-                                    localPos: new Vector3(0f, 0.72f, 0f),
-                                    localScale: new Vector3(0.45f, 0.30f, 1f),
+                                    localPos: new Vector3(0f, 0.58f, 0f),
+                                    localScale: new Vector3(1.6f, 1.6f, 1f),
                                     sortOrder: 2);
         pushHand.SetActive(false);
 
-        // Block shield — cyan-tinted wide plate so it reads differently from the body
-        var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, new Color(0.4f, 0.9f, 1f),
-                                     localPos: new Vector3(0f, 0.60f, 0f),
-                                     localScale: new Vector3(1.1f, 0.18f, 1f),
+        // Block shield — large cyan plate hugging the body front; size makes the block state
+        // unmistakable. (Sprite native 0.48×0.10u → 0.72×0.18u — was a 0.018u hairline.)
+        var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, new Color(0.35f, 0.8f, 1f),
+                                     localPos: new Vector3(0f, 0.46f, 0f),
+                                     localScale: new Vector3(1.5f, 1.8f, 1f),
                                      sortOrder: 2);
         blockHand.SetActive(false);
 
