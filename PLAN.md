@@ -544,6 +544,22 @@ parallel, e.g. between long training runs.
 - [ ] Validate push-on-release feel and stamina costs in playtests (Section 0 ❓ items).
 - [ ] Ring-shrink telegraph: combine the 4c boundary pulse with an audio cue.
 
+**Task 4e — State readability (sprite visibility).**
+The hand and state sprites are too small to read at the camera's zoom (orthographic
+size 12, full 20u ring). A viewer currently cannot tell which state a player is in.
+- [ ] Enlarge the hand sprites — push fist (Charging + Pushing) and block shield
+  (Blocking) — so they are legible from the static camera distance. They are currently
+  too small relative to the body.
+- [ ] Block: make the shield sprite unmistakable — larger, with a contrasting outline
+  or colour so a blocking opponent reads instantly.
+- [ ] Dodge: the blue tint is too subtle. Pair it with the Task 4b dodge `TrailRenderer`
+  and consider a brief scale-pop or afterimage on dodge start.
+- [ ] State distinctness audit: Stunned (gray) / Dodging (blue) / Charging (white glow)
+  / Blocking — each must be distinguishable at a glance against BOTH player colours
+  (green P1, red P2). Adjust any tint that washes out.
+- [ ] Acceptance: from the static camera, a viewer can name the opponent's state
+  (charging / blocking / dodging / stunned) without squinting.
+
 ---
 
 ### Suggested execution order
