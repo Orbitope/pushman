@@ -258,6 +258,8 @@ public class Player : MonoBehaviour
             SetState(PlayerState.Moving);
             other.Stun(0.5f);
             other.ApplyImpulse(hitDir * stats.dodgeForce);
+            RLAgentBrain myRL = Brain as RLAgentBrain;
+            myRL?.AddDodgeHitReward();
         }
     }
 

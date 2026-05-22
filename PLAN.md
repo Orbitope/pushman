@@ -21,7 +21,7 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
 - ✅ `RLAgentBrain` — Discrete/Continuous action space toggle, `ObservationProfile` SO, `BotPersonality` reward hooks
 - ✅ Training configs — `ppo_discrete_baseline.yaml`, `ppo_selfplay.yaml`, `sac_continuous.yaml`, `ppo_fast_experiment.yaml`
 - ✅ Training scene — 8×8 = 64 arenas, 25u spacing (ring radius 10u, players ring out before reaching neighbours)
-- ✅ BotPersonality SOs — `Aggressive`, `Defensive`, `Balanced`, `Rusher`
+- ✅ BotPersonality SOs — `Aggressive`, `Defensive`, `Evasive`, `Balanced`, `Counter` (5 distinct RPS playstyles, retuned 2026-05-21)
 - ✅ CharacterStats SOs — `DefaultStats`, `Heavyweight`, `Speedster`
 - ✅ ObservationProfile SOs — `Profile_A` (full), `Profile_B` (FOV 90°), `Profile_C` (FOV + noise stubs)
 - ✅ `Assets/MLModels/` folder — target for trained ONNX files; naming: `[Personality]_[Stats]/PushmanAgent.onnx`
@@ -115,8 +115,11 @@ Phase 2b (`Pushman_SelfPlay_v1`) completed at 20M steps. Game mechanics overhaul
   LSTM config + architecture mismatch mean it cannot be warm-started from. Phase 2e is
   now a fresh self-play run that supersedes 2b entirely (see Section 4). Task 2a ✅;
   2c ✅ mixed scene exists but unused (scripted bots too weak); 2d ✅ CharacterStats obs.
-- ❌ Phase 3 — REVISED to round-robin multi-personality self-play (see Section 4).
-- ❌ Phase 3 — reward shaping for distinct playstyles
+- 🔄 Phase 3 — REVISED to round-robin multi-personality self-play (see Section 4).
+  Task 3b ✅ 5 personality assets authored + retuned (Aggressive, Defensive, Evasive,
+  Balanced, Counter — RPS-differentiated). Task 3a 🔄 partial: `dodgeHitReward` added +
+  wired; the 6 optional "playstyle channels" deferred (5 personalities are already
+  distinct on the core action rewards). 3c/3d/3e ❌ pending.
 - ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
 
 **Standalone Build Notes (apply after every rebuild)**
@@ -377,55 +380,48 @@ multi-behavior run. Each learns to beat every other style, not just a mirror of 
 Stats randomise per episode (`statsPool`), so the full (personality × stats) permutation
 gets covered over training time.
 
-**Task 3a — New reward channels (CODE CHANGE).**
-- [ ] `Assets/Scripts/BotPersonality.cs` — add fields (`dodgeEvasionReward` already
-  exists from the Phase 2 mechanics work — keep it, do not re-add):
-  ```
-  [Header("Playstyle Channels")]
-  public float ringOutWinBonus = 0f;        // extra reward when the win is a ring-out
-  public float comboReward = 0f;            // hit landed within comboWindowSteps of a dodge
-  public int   comboWindowSteps = 30;
-  public float centerControlMultiplier = 0f;// per-step, reward for being near center
-  public float staminaSavingReward = 0f;    // terminal, scaled by leftover stamina on a win
-  public float edgeBaitMultiplier = 0f;     // per-step, reward for surviving near the edge
-  ```
-- [ ] `Assets/Scripts/RLAgentBrain.cs` — wire each channel:
-  - `ringOutWinBonus`: in `RegisterWin()` add `personality.ringOutWinBonus` (every
-    `RegisterWin` IS a ring-out — timeouts never call it).
-  - `staminaSavingReward`: in `RegisterWin()` add
-    `staminaSavingReward * (myPlayer.currentStamina / myPlayer.stats.maxStamina)`.
-  - `comboReward`: track `int stepsSinceDodge` — reset to 0 when a dodge is issued,
-    increment each `FixedUpdate`. In `AddLandPushReward()`, if
-    `stepsSinceDodge < personality.comboWindowSteps` also add `personality.comboReward`.
-  - `centerControlMultiplier`: in `FixedUpdate`, add `(1 - selfDist/radius) * centerControlMultiplier`.
-  - `edgeBaitMultiplier`: in `FixedUpdate`, add `(selfDist/radius) * edgeBaitMultiplier`.
-  - `dodgeEvasionReward`: ✅ already wired — `AddDodgeEvasionReward()` exists and is
-    called from `Player.HandleDodgeCollision` when a dodge breaks a block.
+**Task 3a — Dodge reward channel (CODE CHANGE).** ✅ DONE 2026-05-21
+- ✅ `BotPersonality.cs` — `dodgeEvasionReward` (Phase 2) + `dodgeHitReward` (new) fields.
+- ✅ `RLAgentBrain.cs` — `AddDodgeEvasionReward()` + `AddDodgeHitReward()` wired.
+- ✅ `Player.HandleDodgeCollision` — calls `AddDodgeEvasionReward()` when a dodge breaks
+  a block, `AddDodgeHitReward()` when a dodge connects with a non-blocking opponent.
+  This completes the RPS triangle: Block beats Push, Dodge beats Block, Push beats Dodge.
+- DEFERRED: the 6 "playstyle channels" from the earlier plan draft (`ringOutWinBonus`,
+  `comboReward`/`comboWindowSteps`, `centerControlMultiplier`, `staminaSavingReward`,
+  `edgeBaitMultiplier`) are NOT needed — the 5 personalities below are already visibly
+  distinct on the 6 core action rewards. Revisit only if the 3e eval shows two
+  personalities converging to the same strategy.
 
-**Task 3b — Author the 5 personality assets** (`Assets/ScriptableObjects/Personalities/`).
-Starting values — tune after the 3e eval:
+**Task 3b — Author the 5 personality assets.** ✅ DONE 2026-05-21
+(`Assets/ScriptableObjects/Personalities/` — `Rusher` renamed to `Evasive`; `Counter`
+added new.) Differentiation is purely the reward asset; architecture is identical.
 
-| Field | Aggressive | Defensive | Rusher | Balanced | Trickster |
+| Field | Aggressive | Defensive | Evasive | Balanced | Counter |
 |---|---|---|---|---|---|
 | winRound | 1.5 | 1.5 | 1.5 | 1.5 | 1.5 |
-| loseRound | -1.5 | -1.0 | -2.0 | -1.5 | -1.5 |
-| landPushHit | 0.25 | 0.10 | 0.40 | 0.20 | 0.15 |
-| takePushHit | -0.20 | -0.05 | -0.02 | -0.15 | -0.20 |
-| successfulBlock | 0.05 | 0.20 | 0.00 | 0.08 | 0.05 |
-| pushBlocked | -0.05 | -0.05 | -0.10 | -0.05 | -0.05 |
-| facingOpponentMultiplier | 0.0001 | 0.0001 | 0.0001 | 0.0001 | 0.0001 |
-| opponentEdgePressureMultiplier | 0.0004 | 0.0002 | 0.0005 | 0.0003 | 0.0003 |
-| timePenaltyPerStep | -0.0001 | 0.0 | -0.0002 | -0.0001 | -0.00005 |
-| wastedStaminaMultiplier | -0.05 | -0.02 | -0.01 | -0.04 | -0.05 |
-| ringOutWinBonus | 0.30 | 0.20 | 0.50 | 0.30 | 0.30 |
-| dodgeEvasionReward | 0.05 | 0.05 | 0.00 | 0.05 | 0.20 |
-| comboReward | 0.10 | 0.00 | 0.05 | 0.10 | 0.30 |
-| centerControlMultiplier | 0.0 | 0.0003 | 0.0 | 0.0001 | 0.0 |
-| staminaSavingReward | 0.0 | 0.30 | 0.0 | 0.10 | 0.10 |
-| edgeBaitMultiplier | 0.0 | 0.0 | 0.0 | 0.0 | 0.0002 |
+| loseRound | -1.5 | -1.5 | -1.5 | -1.5 | -1.5 |
+| landPushHit | 0.35 | 0.15 | 0.10 | 0.20 | 0.25 |
+| takePushHit | -0.20 | -0.10 | -0.30 | -0.15 | -0.25 |
+| successfulBlock | 0.05 | 0.25 | 0.02 | 0.10 | 0.15 |
+| pushBlocked | -0.02 | -0.05 | 0.00 | -0.02 | -0.10 |
+| dodgeEvasionReward | 0.15 | 0.05 | 0.25 | 0.10 | 0.12 |
+| dodgeHitReward | 0.10 | 0.05 | 0.20 | 0.10 | 0.12 |
+| facingOpponentMultiplier | 0.0003 | 0.0002 | 0.0001 | 0.0003 | 0.0003 |
+| wastedStaminaMultiplier | -0.02 | -0.05 | -0.03 | -0.03 | -0.04 |
+| opponentEdgePressureMultiplier | 0.0006 | 0.0002 | 0.0003 | 0.0004 | 0.0003 |
+| timePenaltyPerStep | -0.0002 | -0.00005 | -0.0001 | -0.0001 | -0.00008 |
 
-Intent: Aggressive = relentless pressure · Defensive = patient blocking wall · Rusher =
-reckless all-in · Balanced = well-rounded · Trickster = dodge-bait-punish.
+Intent & expected meta (action-level RPS lifted to personality level):
+- **Aggressive** — push spam, low block reward. Beats Defensive (pushes pressure it),
+  loses to Evasive (dodges escape the spam).
+- **Defensive** — high block reward, soft hit penalty, patient (low time penalty).
+  Beats Aggressive (blocks the pushes), loses to Evasive (dodges break the blocks).
+- **Evasive** — dodge-focused, harsh hit penalty (-0.30 — must not get caught), never
+  blocks. Beats Defensive (breaks blocks), loses to Aggressive (caught by push spam).
+- **Balanced** — even rewards across all actions. Neutral matchup vs everyone; the
+  control baseline.
+- **Counter** — harsh penalties for both taking hits (-0.25) and whiffing pushes
+  (-0.10). Punishes opponent mistakes; rewards disciplined play.
 
 **Task 3c — Round-robin training scene (`Pushman/3e`).**
 - [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
@@ -512,5 +508,6 @@ parallel, e.g. between long training runs.
 2. **Phase 2d** (stat observations) — do before 2c/2e: it changes the obs space and
    forces a fresh run anyway, so batch all obs-space work together.
 3. **Phase 2a/2b/2c/2e** — `train.sh` flag, self-play, curriculum scene, master retrain.
-4. **Phase 3** — specialists warm-started from the Phase 2 master; then Phase 2f.
+4. **Phase 3** — round-robin: all 5 personalities warm-started from the Phase 2 master,
+   trained simultaneously against each other (no frozen specialists).
 5. **Phase 4** — parallelisable; pick up between long training runs.

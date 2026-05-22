@@ -17,6 +17,10 @@ public class BotPersonality : ScriptableObject
              "Prevents reward from dodge spam vs standing opponent. Suggested: 0.05-0.15")]
     public float dodgeEvasionReward = 0.05f;
 
+    [Tooltip("Reward when agent's dodge hits a non-blocking opponent. " +
+             "Encourages dodge as offensive action, not just evasion. Suggested: 0.1")]
+    public float dodgeHitReward = 0.1f;
+
     [Header("Positioning & Tactics (Continuous / Per Step)")]
     [Tooltip("Reward for facing the opponent. Mild nudge toward engagement. Suggested: 0.0001")]
     public float facingOpponentMultiplier = 0.0001f;
