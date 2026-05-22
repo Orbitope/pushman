@@ -432,13 +432,12 @@ Intent & expected meta (action-level RPS lifted to personality level):
 **Task 3c — Round-robin training scene (`Pushman/3e`).**
 - [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
   `BuildTrainingScene()` as the template.
-- [ ] DECISION NEEDED — self-pairings? 5 personalities give C(5,2)=10 cross pairings.
-  Adding the 5 mirrors (Aggressive vs Aggressive, etc.) = 15 total. Mirrors are not
-  required for the Phase 3 goal (cross-matrix distinctness) but close the gap where two
-  same-personality bots meet at deployment. RECOMMENDATION: include mirrors — cheap, and
-  removes an untrained matchup. Size the grid to the choice.
-- [ ] Grid: 40 arenas (8×5) with mirrors (~2-3 per pairing), or 6×6=36 without.
-  Distribute via `pairing = arenaIndex % N` (N = 15 with mirrors, 10 without).
+- [ ] DECISION (2026-05-22): include mirrors. 15 pairings total — the 10 cross
+  pairings C(5,2) PLUS the 5 mirrors (Aggressive vs Aggressive, etc.). Mirrors close
+  the gap where two same-personality bots meet at deployment and let each personality
+  learn its own counter.
+- [ ] Grid: 45 arenas (9×5) — 15 pairings × 3 arenas each, exact and even.
+  Distribute via `pairing = arenaIndex % 15`.
 - [ ] Per arena, Player1 and Player2 take the pairing's two personalities. For each:
   set `RLAgentBrain.personality` to the matching `BotPersonality` SO, and set
   `BehaviorParameters.BehaviorName` to that personality's name (e.g. `Aggressive`).
@@ -451,10 +450,10 @@ Intent & expected meta (action-level RPS lifted to personality level):
 - [ ] Save to `Assets/Scenes/ML_Training_RoundRobin.unity`. In Build Settings make it
   the ONLY enabled scene — if the old training scene stays enabled and ordered first,
   the build silently trains the wrong scene for hours.
-- [ ] Acceptance (verify ALL before the multi-hour run): N arenas built; every
-  `RLAgentBrain.personality` is non-null; every `BehaviorParameters.BehaviorName`
-  exactly matches a `behaviors:` key in `ppo_roundrobin.yaml`; all 5 personalities
-  present; obs space logged as 18.
+- [ ] Acceptance (verify ALL before the multi-hour run): 45 arenas built, all 15
+  pairings represented 3× each; every `RLAgentBrain.personality` is non-null; every
+  `BehaviorParameters.BehaviorName` exactly matches a `behaviors:` key in
+  `ppo_roundrobin.yaml`; all 5 personalities present; obs space logged as 18.
 
 **Task 3d — Multi-behavior config + train.**
 - [ ] New `TrainingConfigs/ppo_roundrobin.yaml` — 5 `behaviors:` blocks, one per
