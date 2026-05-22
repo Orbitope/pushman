@@ -124,9 +124,10 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
 - 🔄 Phase 3 — round-robin multi-personality training (see Section 4). Code + assets
   ready: Task 3a ✅ dodge reward channels wired; Task 3b ✅ 5 RPS-differentiated
   personalities (Aggressive, Defensive, Evasive, Balanced, Counter). Remaining, in
-  order: 3c ❌ `match_logs` path fix · 3d ❌ round-robin scene · 3e ❌ multi-behavior
-  config + train · 3f ❌ evaluate.
-- ❌ Phase 4 — visual & gameplay polish (sound, effects, feel)
+  order: 3c ❌ pre-rebuild fixes (match_logs path + remove dodge overdraft) · 3d ❌
+  round-robin scene · 3e ❌ multi-behavior config + train · 3f ❌ evaluate.
+- 🔄 Phase 4 — visual & gameplay polish. Task 4e ✅ done (state readability: enlarged
+  hand sprites + state tints). 4a-4d (audio, effects, arena/HUD, feel) pending.
 
 **Standalone Build Notes (apply after every rebuild)**
 Two patches are required after building — they survive until the next rebuild:
@@ -429,11 +430,14 @@ Intent & expected meta (action-level RPS lifted to personality level):
 - **Counter** — harsh penalties for both taking hits (-0.25) and whiffing pushes
   (-0.10). Punishes opponent mistakes; rewards disciplined play.
 
-**Task 3c — `match_logs` path fix (code — must precede the rebuild).**
-`MatchLogger` writes to `Directory.GetCurrentDirectory()/match_logs/`, which for a
-standalone build resolves to `builds/match_logs/`, not the project-root `match_logs/`
-that `report.py` searches. The win-rate matrix is the ONLY mid-run health signal once
-self-play ELO is gone, so this must work before Phase 3 launches.
+**Task 3c — Pre-rebuild fixes (code/assets — must precede the Phase 3 rebuild).**
+Two unrelated changes that both must land before the standalone is rebuilt for Phase 3.
+
+**3c.1 — `match_logs` path fix.** `MatchLogger` writes to
+`Directory.GetCurrentDirectory()/match_logs/`, which for a standalone build resolves to
+`builds/match_logs/`, not the project-root `match_logs/` that `report.py` searches. The
+win-rate matrix is the ONLY mid-run health signal once self-play ELO is gone, so this
+must work before Phase 3 launches.
 - [ ] In `tools/report.py`, function `newest_match_log()` — glob both locations:
   ```python
   files = sorted(
@@ -443,6 +447,29 @@ self-play ELO is gone, so this must work before Phase 3 launches.
   (`glob` and `os` are already imported.)
 - [ ] Acceptance: `python tools/report.py --matches-only` finds the newest CSV with no
   hand-passed path. Phase 2's logs are in `builds/match_logs/` — test against those.
+
+**3c.2 — Remove the dodge overdraft mechanic.** WHY: `Player.TryDodgeWithOverdraft`
+lets a player dodge with insufficient stamina (the only gate is `currentStamina >= 0`),
+going negative and pausing regen for `overdraftPauseDuration` (1.5s). The Phase 2 agents
+abuse it — the dodge's reward is immediate, the ~6s "broke and can't act" dead zone is
+delayed and diffuse, so the policy converged on "dodge freely, eat the debt." Playtest
+on 2026-05-22 confirmed both agents stuck at negative stamina, drifting uselessly.
+Overdraft turns a hard stamina limit into a soft one and kills stamina management as a
+skill. DECISION: remove it (Option A) — a clutch-escape mechanic can be redesigned
+properly later if wanted.
+TIMING: must land before Phase 3 training. Phase 3 warm-starts from `Master_v1`, a
+policy adapted to overdraft; it does NOT reset — under the new mechanic PPO adjusts it
+away from the overdraft-reliant local optimum during the run. Doing it now folds that
+adaptation into a run that happens anyway; doing it after Phase 3 needs a separate
+adaptation run. Expect Phase 3 to converge a little slower since the warm-start begins
+maladapted (un-learning overdraft on top of learning the 5-way differentiation).
+- [ ] Set `allowDodgeOverdraft: false` on all `CharacterStats` assets (DefaultStats has
+  it `true`; confirm Heavyweight/Speedster against the `CharacterStats.cs` default).
+- [ ] Optionally delete the now-dead overdraft branch in `Player.TryDodgeWithOverdraft`
+  and the unused `overdraftPauseDuration` field for cleanliness.
+- [ ] With overdraft off a dodge hard-requires `dodgeStamina` (Default 40, Heavyweight
+  50, Speedster 25); stamina floors at 0 (no negative-stamina drift). Verify each
+  character can still dodge at a reasonable cadence.
 
 **Task 3d — Round-robin training scene (`Pushman/3e`).**
 - [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
@@ -544,21 +571,23 @@ parallel, e.g. between long training runs.
 - [ ] Validate push-on-release feel and stamina costs in playtests (Section 0 ❓ items).
 - [ ] Ring-shrink telegraph: combine the 4c boundary pulse with an audio cue.
 
-**Task 4e — State readability (sprite visibility).**
-The hand and state sprites are too small to read at the camera's zoom (orthographic
-size 12, full 20u ring). A viewer currently cannot tell which state a player is in.
-- [ ] Enlarge the hand sprites — push fist (Charging + Pushing) and block shield
-  (Blocking) — so they are legible from the static camera distance. They are currently
-  too small relative to the body.
-- [ ] Block: make the shield sprite unmistakable — larger, with a contrasting outline
-  or colour so a blocking opponent reads instantly.
-- [ ] Dodge: the blue tint is too subtle. Pair it with the Task 4b dodge `TrailRenderer`
-  and consider a brief scale-pop or afterimage on dodge start.
-- [ ] State distinctness audit: Stunned (gray) / Dodging (blue) / Charging (white glow)
-  / Blocking — each must be distinguishable at a glance against BOTH player colours
-  (green P1, red P2). Adjust any tint that washes out.
-- [ ] Acceptance: from the static camera, a viewer can name the opponent's state
-  (charging / blocking / dodging / stunned) without squinting.
+**Task 4e — State readability (sprite visibility).** ✅ DONE 2026-05-22
+The hand and state sprites were too small to read at the camera's zoom (orthographic
+size 12, full 20u ring) — a viewer could not tell which state a player was in.
+- ✅ Hand sprites enlarged (`PushmanSetup.ApplyPlayerSprites`): push fist scale
+  0.45/0.30 → 1.6/1.6 (≈0.38×0.26u); block shield 1.1/0.18 → 1.5/1.8 — was a 0.018u
+  hairline, now a 0.72×0.18u body-width plate.
+- ✅ `Player.UpdateStateColor`: added a Blocking body tint (there was none — blocking
+  showed only via the hairline shield); Dodging strengthened to a vivid blue; colour
+  lerp 5→8/s so a 0.25s dodge registers.
+- ✅ Applied via `Pushman/4`; regenerated hand bounds verified in-scene over the MCP.
+- DEFERRED to the Task 4b effects pass: dodge `TrailRenderer` + scale-pop.
+
+PLAYTEST FINDING (2026-05-22) — while verifying 4e in Play mode, both agents were
+observed stuck in NEGATIVE stamina (P1 −34, P2 −7; max 100), unable to push/dodge/block,
+drifting in Moving state. Root cause: the dodge overdraft mechanic is being abused
+(see Phase 3 Task 3c.2). This is why the watch scene looks static — it is a gameplay
+issue, not a visual one. The 4e visuals themselves are correct and verified.
 
 ---
 
@@ -567,8 +596,9 @@ size 12, full 20u ring). A viewer currently cannot tell which state a player is 
 1. ✅ **Phase 1** — reward retune + LSTM baseline. Done.
 2. ✅ **Phase 2** — `Pushman_Master_v1`, 20M-step Aggressive self-play. Done.
 3. **Phase 3** — round-robin (NEXT). Remaining tasks in dependency order:
-   a. Task 3c — `match_logs` path fix (code; must land before the rebuild).
+   a. Task 3c — pre-rebuild fixes: match_logs path + remove dodge overdraft (code/assets).
    b. Task 3d — build `ML_Training_RoundRobin` scene in Unity.
    c. Task 3e — write `ppo_roundrobin.yaml`, ONE rebuild, launch + fast-fail check.
    d. Task 3f — evaluate the personality win-rate matrix; retune as needed.
-4. **Phase 4** — visual & gameplay polish. Parallelisable; pick up between training runs.
+4. **Phase 4** — visual & gameplay polish. Task 4e (state readability) ✅ done; 4a-4d
+   parallelisable, pick up between training runs.
