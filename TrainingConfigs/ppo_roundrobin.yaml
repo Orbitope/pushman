@@ -1,0 +1,163 @@
+# Pushman — Round-Robin Multi-Personality Training (Phase 3)
+#
+# 5 behaviors train simultaneously in ML_Training_RoundRobin.unity
+# (45 arenas, 15 pairings × 3, all personality pairs including mirrors).
+# Every behavior warm-starts from the Phase 2 master checkpoint so the
+# run begins adapted, not from random init.
+#
+# FAST-FAIL CHECK: within the first ~2 min, confirm the log prints
+#   "Initializing from results/Pushman_Master_v1/..."  for EVERY behavior
+#   with NO "Failed to load" warnings. Abort immediately on any failure.
+#
+# Launch (rebuild standalone first — round-robin is the only enabled scene):
+#   ./train.sh --standalone --config=ppo_roundrobin --id=Pushman_RoundRobin_v1 --force
+#
+# Export after run (~4-6 h):
+#   results/Pushman_RoundRobin_v1/<BehaviorName>/  → Assets/MLModels/<Personality>_Default/PushmanAgent.onnx
+
+behaviors:
+
+  # -------------------------------------------------------------------------
+  # Architecture MUST match Master v1 exactly — input layer is 128×18;
+  # any deviation breaks warm-start loading.
+  # -------------------------------------------------------------------------
+
+  Aggressive:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+    max_steps: 5_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5
+
+  Defensive:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+    max_steps: 5_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5
+
+  Evasive:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+    max_steps: 5_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5
+
+  Balanced:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+    max_steps: 5_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5
+
+  Counter:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+    max_steps: 5_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5

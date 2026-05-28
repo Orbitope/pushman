@@ -18,12 +18,6 @@ public class CharacterStats : ScriptableObject
     [Tooltip("Multiplier applied to staminaRegenRate after regenBoostThreshold is reached.")]
     public float regenBoostMultiplier = 2.5f;
 
-    [Header("Stamina Overdraft (Dodge Only)")]
-    [Tooltip("Allow a dodge even when stamina would go negative. Must not already be in overdraft debt.")]
-    public bool allowDodgeOverdraft = true;
-    [Tooltip("Seconds regen is paused after an overdraft dodge resolves back to Moving.")]
-    public float overdraftPauseDuration = 1.5f;
-
     [Header("Dodge")]
     public float dodgeForce = 18f;
     public float dodgeStamina = 40f;

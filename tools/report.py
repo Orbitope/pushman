@@ -116,7 +116,9 @@ def training_report(run_id):
 # --------------------------------------------------------------------------
 
 def newest_match_log():
-    files = sorted(glob.glob("match_logs/*.csv"), key=os.path.getmtime)
+    files = sorted(
+        glob.glob("match_logs/*.csv") + glob.glob("builds/match_logs/*.csv"),
+        key=os.path.getmtime)
     return files[-1] if files else None
 
 

@@ -1,0 +1,77 @@
+# Pushman — Phase 3.7: Self-play hardening on top of v3
+#
+# Warm-starts from v3's 10M checkpoint (obs space expansion validated). Continues
+# training for another 20M steps with ML-Agents self-play enabled. Combined total:
+# 10M (v3) + 20M (this) = 30M, same budget as the original v2 from-scratch run.
+#
+# What self-play adds: the agent plays against historical snapshots of itself
+# alongside the live round-robin opponents. Prevents policy collapse / forgetting
+# and improves robustness against novel strategies (including human play patterns
+# the round-robin personalities don't produce).
+#
+# Prerequisite: Team IDs must be wired in PushmanSetup.WireRLPlayerForRR before
+# rebuild (set bp.TeamId = playerIndex % 2 so Player1=team0, Player2=team1).
+# Without team IDs, self-play has no team distinction and silently no-ops.
+#
+# Throughput note: with self-play, only the team-0 side learns per step (team-1
+# is the ghost). This effectively halves gradient updates per arena vs the v3
+# round-robin where both sides trained. 20M steps here ≈ 10M steps of gradient
+# updates in v3-equivalent terms. Accept that for the robustness benefit.
+#
+# Launch (after v3 validates and Team IDs are wired + scene rebuilt):
+#   ./train.sh --standalone --config=ppo_shared_v37 --id=Pushman_Shared_v37 --force
+#
+# Fast-fail check during first ~3 min:
+#   - Confirm "[RLAgentBrain] Player1 obs=33" in the Unity standalone log
+#     (if you see obs=23, the standalone is stale — stop and rebuild before continuing)
+#   - Confirm "Initializing from results/Pushman_Shared_v3/..." (warm-start works)
+#   - Confirm "Observation space size: 33" in the mlagents-learn output (unchanged from v3)
+#   - Confirm self_play section in hyperparameter dump
+#   - Confirm TensorBoard gets a Self-Play/ELO scalar within first few minutes
+#
+# Export after run:
+#   results/Pushman_Shared_v37/Pushman/ → Assets/MLModels/Pushman_Shared/PushmanAgent_v37.onnx
+
+behaviors:
+
+  Pushman:
+    trainer_type: ppo
+
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 32768
+      learning_rate: 1.0e-4    # lower than v3's 3e-4 — preserve learned strategies
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 5
+
+    network_settings:
+      normalize: true
+      hidden_units: 256
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+    # Warm-start from v3's final checkpoint. Update step number if v3 ran longer/shorter.
+    init_path: results/Pushman_Shared_v3/Pushman/Pushman-20000094.pt
+
+    # Self-play config — ghost opponent pool maintained alongside round-robin diversity.
+    self_play:
+      save_steps: 100_000                      # snapshot policy every 100k steps for ghost pool
+      swap_steps: 20_000                       # rotate ghost opponent every 20k steps
+      window: 15                               # keep 15 past snapshots in the pool
+      play_against_latest_model_ratio: 0.5     # 50% vs live policy, 50% vs historical ghost
+      initial_elo: 1200.0
+
+    max_steps: 30_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5

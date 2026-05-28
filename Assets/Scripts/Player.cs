@@ -9,7 +9,7 @@ public class Player : MonoBehaviour
 
     [Header("Combat")]
     public LayerMask opponentLayer;
-    public float pushHitRadius = 0.6f;
+    public float pushHitRadius = 0.8f;
     public float pushHitOffset = 0.7f;
 
     // Stamina UI is handled by StaminaHUD (screen-space canvas) — no field needed here.
@@ -33,9 +33,6 @@ public class Player : MonoBehaviour
 
     // Stamina regen boost tracking
     private float _timeInMovingState;
-    private float _regenPausedUntil;
-    /// <summary>True while an overdraft dodge is serving its regen-lockout penalty.</summary>
-    public bool RegenPaused => Time.time < _regenPausedUntil;
 
     // State Scripts
     public PlayerMovingState movingStateScript;
@@ -96,20 +93,15 @@ public class Player : MonoBehaviour
 
         // Regen only while Moving — not while stunned/charging/blocking/dodging.
         // Moving-state timer accumulates to unlock a regen boost (reward for disengaging).
-        // Overdraft penalty (from a desperate dodge) pauses regen for overdraftPauseDuration.
         if (stats != null)
         {
             if (currentState == PlayerState.Moving)
             {
                 _timeInMovingState += Time.deltaTime;
-
-                if (!RegenPaused)
-                {
-                    float rate = _timeInMovingState >= stats.regenBoostThreshold
-                        ? stats.staminaRegenRate * stats.regenBoostMultiplier
-                        : stats.staminaRegenRate;
-                    currentStamina = Mathf.Min(stats.maxStamina, currentStamina + rate * Time.deltaTime);
-                }
+                float rate = _timeInMovingState >= stats.regenBoostThreshold
+                    ? stats.staminaRegenRate * stats.regenBoostMultiplier
+                    : stats.staminaRegenRate;
+                currentStamina = Mathf.Min(stats.maxStamina, currentStamina + rate * Time.deltaTime);
             }
             else
             {
@@ -147,6 +139,12 @@ public class Player : MonoBehaviour
             targetColor = baseColor;
 
         // 8/s lerp — fast enough that even a 0.25s dodge visibly registers.
+        // Skip one frame if we're still above white (hit flash hasn't started fading yet).
+        if (spriteRenderer.color.r > 1.05f || spriteRenderer.color.g > 1.05f || spriteRenderer.color.b > 1.05f)
+        {
+            spriteRenderer.color = Color.Lerp(spriteRenderer.color, Color.white, Time.deltaTime * 12f);
+            return;
+        }
         spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 8f);
     }
 
@@ -198,9 +196,12 @@ public class Player : MonoBehaviour
             else
             {
                 other.Stun(0.5f);
+                other.TriggerHitFlash();
                 other.ApplyImpulse(pushDir * strength);
                 otherRL?.AddTakeHitReward();
-                myRL?.AddLandPushReward();
+                // Pass victim's position so the brain can compute the edge-hit bonus.
+                // A hit at the ring edge ≈ ring-out moment → big bonus; center hit ≈ tiny.
+                myRL?.AddLandPushReward(other.transform.position);
                 Stun(0.2f);                          // recovery frames
             }
             return;
@@ -233,6 +234,7 @@ public class Player : MonoBehaviour
         if (other.currentState == PlayerState.Dodging)
         {
             // Mutual dodge: both fire this callback, so resolve exactly once.
+            dodgingStateScript.NotifyHit();
             if (GetInstanceID() < other.GetInstanceID())
             {
                 Vector2 dir = ((Vector2)(transform.position - other.transform.position)).normalized;
@@ -245,6 +247,7 @@ public class Player : MonoBehaviour
         else if (other.currentState == PlayerState.Blocking && other.IsFacing(this))
         {
             // Dodge breaks block
+            dodgingStateScript.NotifyHit();
             other.SetState(PlayerState.Moving);
             RLAgentBrain otherRL = other.Brain as RLAgentBrain;
             RLAgentBrain myRL = Brain as RLAgentBrain;
@@ -256,42 +259,39 @@ public class Player : MonoBehaviour
         }
         else
         {
+            dodgingStateScript.NotifyHit();
             Vector2 hitDir = ((Vector2)(other.transform.position - transform.position)).normalized;
             SetVelocity(Vector2.zero);
             SetState(PlayerState.Moving);
             other.Stun(0.5f);
+            other.TriggerHitFlash();
             other.ApplyImpulse(hitDir * stats.dodgeForce);
             RLAgentBrain myRL = Brain as RLAgentBrain;
-            myRL?.AddDodgeHitReward();
+            myRL?.AddDodgeHitReward(other.transform.position);
         }
     }
 
     // --- Helpers ---
+
+    /// <summary>
+    /// Snap the body color to bright white so a push or dodge hit registers visually.
+    /// UpdateStateColor's 8/s lerp naturally fades it back — no coroutine needed.
+    /// </summary>
+    public void TriggerHitFlash()
+    {
+        if (spriteRenderer != null) spriteRenderer.color = Color.white * 2f; // HDR-ish pop
+    }
 
     public void ApplyImpulse(Vector2 force) => rb.AddForce(force, ForceMode2D.Impulse);
     public void SetVelocity(Vector2 velocity) => rb.linearVelocity = velocity;
     public bool CanUseStamina(float amount) => currentStamina >= amount;
     public void UseStamina(float amount) => currentStamina = Mathf.Max(0f, currentStamina - amount);
 
-    /// <summary>
-    /// Attempt a dodge that may overdraft stamina. Allows the dodge even when stamina would go
-    /// negative, provided overdraft is enabled and the player is not already in debt (stamina &lt; 0).
-    /// Returns true if the dodge should proceed; applies regen lockout penalty automatically.
-    /// </summary>
-    public bool TryDodgeWithOverdraft(float cost)
+    public bool TryDodge(float cost)
     {
-        if (CanUseStamina(cost))
-        {
-            UseStamina(cost);
-            return true;
-        }
-        if (stats.allowDodgeOverdraft && currentStamina >= 0f)
-        {
-            currentStamina -= cost;           // intentionally goes negative
-            _regenPausedUntil = Time.time + stats.overdraftPauseDuration;
-            return true;
-        }
-        return false;
+        if (!CanUseStamina(cost)) return false;
+        UseStamina(cost);
+        return true;
     }
 
     public void Stun(float duration)

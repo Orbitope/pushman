@@ -8,19 +8,27 @@ using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using TMPro;
 
 // Pushman > 1. Setup Test Scene  — builds the SampleScene from scratch
 // Pushman > 2. Save Prefabs      — bakes Arena + Player_RL prefabs from the active scene
 // Pushman > 3. Build Training Scene — generates ML_Training_Scene with N×N arenas
 public static class PushmanSetup
 {
-    private const int OBS_SIZE = 18; // selfKin(3)+selfStam(1)+selfState(1)+selfStats(5)+arena(3)+opp(5)
+    // v3 obs space = 33 dims (Profile_A with full v3 obs set, 1 opponent):
+    //   self: kin(3) + stam(1) + state(1) + chargeProg(1) + stats(5) + personality(5) = 16
+    //   arena: bounds(3) + ringOutMargin(1) = 4
+    //   per-opp: pos(2) + vel(2) + state-onehot(6) + facingSelf→Opp(1) + dist(1) + facingOpp→Self(1) = 13
+    //   total: 16 + 4 + 13×1 = 33
+    private const int OBS_SIZE = 33;
+    private const string SHARED_BEHAVIOR_NAME = "Pushman"; // unified — all round-robin agents feed one network
     private const string PREFAB_FOLDER = "Assets/Prefabs";
     private const string ARENA_PREFAB_PATH = PREFAB_FOLDER + "/Arena.prefab";
     private const string PLAYER_RL_PREFAB_PATH = PREFAB_FOLDER + "/Player_RL.prefab";
     private const string TRAINING_SCENE_PATH = "Assets/Scenes/ML_Training_Scene.unity";
     private const string TRAINING_SCENE_SMALL_PATH = "Assets/Scenes/ML_Training_Scene_Small.unity";
-    private const string TRAINING_SCENE_MIXED_PATH = "Assets/Scenes/ML_Training_Mixed.unity";
+    private const string TRAINING_SCENE_MIXED_PATH      = "Assets/Scenes/ML_Training_Mixed.unity";
+    private const string TRAINING_SCENE_ROUNDROBIN_PATH = "Assets/Scenes/ML_Training_RoundRobin.unity";
     private const int GRID_SIZE = 8;           // GRID_SIZE × GRID_SIZE arenas (full training)
     private const int GRID_SIZE_SMALL = 4;    // smaller grid for fast/dev runs (4×4 = 16 arenas)
     private const int GRID_SIZE_MIXED = 6;    // 6×6=36 arenas (divisible by 3 for even bot distribution)
@@ -156,6 +164,876 @@ public static class PushmanSetup
     }
 
     // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // 6. Personality Showcase Scene
+    //    5 arenas side-by-side, each showing a different personality matchup.
+    //    All arenas use the shared Phase 3 v2 ONNX (Pushman_Shared/PushmanAgent_v2.onnx).
+    //    Personality differentiation comes from BotPersonality SO + self-personality obs.
+    //    Wide orthographic camera shows all 5 arenas at once.
+    //
+    //    Matchups chosen to illustrate the v2 win-rate matrix:
+    //      Arena 0 — Evasive vs Aggressive   (Evasive wins 59%)
+    //      Arena 1 — Aggressive vs Defensive (Aggressive wins 59%)
+    //      Arena 2 — Defensive vs Balanced   (Defensive wins 62% — strongest asymmetry)
+    //      Arena 3 — Counter vs Evasive      (Counter wins 52% — punisher vs dodger)
+    //      Arena 4 — Balanced vs Counter     (~50/50 — the even fight)
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/6. Personality Showcase Scene")]
+    public static void BuildPersonalityShowcaseScene()
+    {
+        const string SHOWCASE_SCENE_PATH = "Assets/Scenes/PersonalityShowcase.unity";
+        const string MODELS_FOLDER       = "Assets/MLModels";
+        const string SHARED_ONNX_PATH    = MODELS_FOLDER + "/Pushman_Shared/PushmanAgent_v39.onnx";
+
+        // Force-import the shared ONNX before loading it.
+        if (System.IO.File.Exists(SHARED_ONNX_PATH))
+            AssetDatabase.ImportAsset(SHARED_ONNX_PATH, ImportAssetOptions.ForceSynchronousImport);
+
+        // Single shared model — all arenas use v39 (33-dim obs, 45M steps, round-robin no self-play).
+        var sharedModel = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(SHARED_ONNX_PATH);
+        if (sharedModel == null)
+            Debug.LogWarning($"[Showcase] Shared ONNX missing at {SHARED_ONNX_PATH}. " +
+                             "Copy results/Pushman_Shared_v39/Pushman/Pushman-45000114.onnx there first.");
+        else
+            Debug.Log($"[Showcase] Loaded shared model: PushmanAgent_v39.onnx ({sharedModel.GetType().Name})");
+
+        string[] personalityNames = { "Aggressive", "Defensive", "Evasive", "Balanced", "Counter" };
+        var personalities = new BotPersonality[5];
+
+        for (int i = 0; i < 5; i++)
+        {
+            personalities[i] = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+                $"Assets/ScriptableObjects/Personalities/{personalityNames[i]}.asset");
+            if (personalities[i] == null)
+                Debug.LogWarning($"[Showcase] Personality asset missing: {personalityNames[i]}");
+        }
+
+        var profileA = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+        var defaultStats = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/DefaultStats.asset");
+
+        // Indexes: 0=Aggressive  1=Defensive  2=Evasive  3=Balanced  4=Counter
+        // Matchups chosen for v2 win-rate matrix: show the clearest asymmetries.
+        var matchups = new (int a, int b, string label)[]
+        {
+            (2, 0, "Evasive vs Aggressive"),     // Evasive 59%
+            (0, 1, "Aggressive vs Defensive"),   // Aggressive 59%
+            (1, 3, "Defensive vs Balanced"),     // Defensive 62% — strongest
+            (4, 2, "Counter vs Evasive"),        // Counter 52% — punisher vs dodger
+            (3, 4, "Balanced vs Counter"),       // ~50/50 — the even fight
+        };
+
+        EnsureFolders();
+        int playerLayer = GetOrAddLayer("Player");
+
+        var circleSprite = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png", () => MakeCircleTexture(128));
+        var pushSprite   = GetOrCreateSprite("Assets/Sprites/PushHand.png",       () => MakeRectTexture(24, 16));
+        var blockSprite  = GetOrCreateSprite("Assets/Sprites/BlockShield.png",    () => MakeRectTexture(48, 10));
+
+        // Build in the current active scene (same pattern as BuildBotVsBotScene).
+        // NewScene() unloads assets loaded above — avoid it.
+        for (int k = 0; k < matchups.Length; k++)
+            CleanupObject($"Arena_{k}_{matchups[k].label.Replace(" ", "_")}");
+        // Also clean up any leftover single-arena objects from other builders.
+        CleanupObject("Arena");
+        CleanupObject("StaminaHUD");
+
+        for (int i = 0; i < matchups.Length; i++)
+        {
+            var (pA, pB, label) = matchups[i];
+            Vector3 offset = new Vector3(i * ARENA_SPACING, 0f, 0f);
+
+            // Build the arena from scratch (not from prefab) so SerializedObject
+            // model assignment works cleanly — same pattern as BuildBotVsBotScene.
+            GameObject arenaGO = new GameObject($"Arena_{i}_{label.Replace(" ", "_")}");
+            arenaGO.transform.position = offset;
+
+            GameObject center = CreateChild("ArenaCenter", arenaGO);
+            center.transform.localPosition = Vector3.zero;
+
+            var spawnPositions = new Vector3[]
+            {
+                new Vector3(-4f,  0f, 0f), new Vector3(4f, 0f, 0f),
+                new Vector3(0f,   4f, 0f), new Vector3(0f, -4f, 0f),
+            };
+            var spawnGOs = new List<GameObject>();
+            for (int s = 0; s < spawnPositions.Length; s++)
+            {
+                var sp = CreateChild($"SpawnPoint_{s + 1}", arenaGO);
+                sp.transform.localPosition = spawnPositions[s];
+                spawnGOs.Add(sp);
+            }
+
+            // Build the two players as fresh GOs so model assignment works.
+            // Both use the shared Phase 3 v2 ONNX — personality comes from the SO + obs.
+            var p1GO = BuildBotPlayer("Player1", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[0], profileA, personalities[pA], sharedModel);
+            var p2GO = BuildBotPlayer("Player2", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[1], profileA, personalities[pB], sharedModel);
+
+            // Both showcase players use the shared "Pushman" behavior so they can load the
+            // v2 ONNX. Personality differentiation comes from the BotPersonality SO (rewards)
+            // and the self-personality observation, not from the BehaviorName.
+            p1GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+            p2GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+
+            Player p1 = p1GO.GetComponent<Player>();
+            Player p2 = p2GO.GetComponent<Player>();
+            int oppMask = 1 << playerLayer;
+            p1.opponentLayer = oppMask;
+            p2.opponentLayer = oppMask;
+
+            // Wire ArenaManager
+            ArenaManager am = arenaGO.AddComponent<ArenaManager>();
+            am.arenaCenter     = center.transform;
+            am.ringOutRadius   = 10f;
+            am.timeUntilShrink = 10f;  // showcase: shrink starts after 10s so fast-cycling arenas always show it
+            am.allPlayers      = new List<Player> { p1, p2 };
+            am.spawnPoints   = new List<Transform>();
+            foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+
+            var rl1 = p1GO.GetComponent<RLAgentBrain>();
+            var rl2 = p2GO.GetComponent<RLAgentBrain>();
+            rl1.arenaManager = am; rl1.opponents = new Player[] { p2 };
+            rl2.arenaManager = am; rl2.opponents = new Player[] { p1 };
+            // Override personality assigned by BuildBotPlayer with the correct one
+            rl1.personality = personalities[pA];
+            rl2.personality = personalities[pB];
+
+            // Per-personality body colors so viewer can match color to label.
+            ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite, PersonalityColor(personalityNames[pA]));
+            ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite, PersonalityColor(personalityNames[pB]));
+            ApplyArenaBoundary(arenaGO, 10f);
+
+            // Bigger push hand in showcase — ring radius 10u, camera far back, need impact to read.
+            SetHandScale(p1GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p1GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+            SetHandScale(p2GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p2GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+
+            // Label above the ring: P1 name (p1 color) / vs / P2 name (p2 color).
+            AddArenaLabel(arenaGO, personalityNames[pA], PersonalityColor(personalityNames[pA]),
+                                   personalityNames[pB], PersonalityColor(personalityNames[pB]),
+                                   yTop: 13.5f);
+
+            EditorUtility.SetDirty(am);
+            EditorUtility.SetDirty(p1GO);
+            EditorUtility.SetDirty(p2GO);
+            Debug.Log($"[Showcase] Arena {i}: {label}");
+        }
+
+        // Wide orthographic camera — all 5 arenas (x=0..100) plus labels above.
+        // At 16:9: width = orthoSize*2*(16/9). Need width ≥ 124u (arenas + padding).
+        // orthoSize = 124/(2*16/9) ≈ 34.9 → use 38 to add breathing room for labels.
+        float centerX = (matchups.Length - 1) * ARENA_SPACING * 0.5f;
+        var cam = Camera.main;
+        if (cam == null)
+        {
+            var camGO = new GameObject("Main Camera");
+            camGO.tag = "MainCamera";
+            cam = camGO.AddComponent<Camera>();
+            camGO.AddComponent<AudioListener>();
+        }
+        cam.orthographic       = true;
+        cam.orthographicSize   = 38f;
+        cam.transform.position = new Vector3(centerX, 1f, -10f);  // shift up 1u to balance labels
+        cam.clearFlags         = CameraClearFlags.SolidColor;
+        cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);  // ContentKit Void — warm near-black
+        EditorUtility.SetDirty(cam.gameObject);
+
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), SHOWCASE_SCENE_PATH);
+
+        var buildScenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!buildScenes.Exists(s => s.path == SHOWCASE_SCENE_PATH))
+            buildScenes.Add(new EditorBuildSettingsScene(SHOWCASE_SCENE_PATH, false));
+        EditorBuildSettings.scenes = buildScenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log($"[Showcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
+                  "  All arenas use PushmanAgent_v39.onnx (Phase 3.9 round-robin, 45M steps, 33-dim obs).\n" +
+                  "  Arena 0 — Evasive vs Aggressive   (Evasive 59%)\n" +
+                  "  Arena 1 — Aggressive vs Defensive (Aggressive 59%)\n" +
+                  "  Arena 2 — Defensive vs Balanced   (Defensive 62% — strongest asymmetry)\n" +
+                  "  Arena 3 — Counter vs Evasive      (Counter 52% — punisher vs dodger)\n" +
+                  "  Arena 4 — Balanced vs Counter     (~50/50 — the even fight)");
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. Difficulty Tier Showcase Scene
+    //    4 arenas side-by-side, each with a different humanization tier pinned.
+    //    All arenas use the v2.5 ONNX and Aggressive vs Aggressive mirror match
+    //    (mirrors isolate difficulty as the only variable). Use Profile_C since
+    //    that's what v2.5 was trained against (noise + delay).
+    //
+    //    Tiers (humanization, noise σ, delay frames):
+    //      Arena 0 — Expert (0.0, 0u,    0 frames /   0ms)
+    //      Arena 1 — Hard   (0.33, 0.05, 4 frames /  80ms)
+    //      Arena 2 — Medium (0.66, 0.10, 8 frames / 160ms)
+    //      Arena 3 — Easy   (1.0,  0.15, 12 frames / 240ms)
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/7. Difficulty Tier Showcase Scene")]
+    public static void BuildDifficultyShowcaseScene()
+    {
+        const string SHOWCASE_SCENE_PATH = "Assets/Scenes/DifficultyShowcase.unity";
+        const string MODELS_FOLDER       = "Assets/MLModels";
+        const string ONNX_PATH           = MODELS_FOLDER + "/Pushman_Shared/PushmanAgent_v39.onnx";
+
+        if (System.IO.File.Exists(ONNX_PATH))
+            AssetDatabase.ImportAsset(ONNX_PATH, ImportAssetOptions.ForceSynchronousImport);
+
+        var model = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ONNX_PATH);
+        if (model == null)
+            Debug.LogWarning($"[DiffShowcase] v39 ONNX missing at {ONNX_PATH}. " +
+                             "Copy results/Pushman_Shared_v39/Pushman/Pushman-45000114.onnx there first.");
+        else
+            Debug.Log($"[DiffShowcase] Loaded v39 model ({model.GetType().Name})");
+
+        var profileC = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_C.asset");
+        var personality = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+            "Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        var defaultStats = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/DefaultStats.asset");
+
+        var tiers = new (float humanization, string label, Color color)[]
+        {
+            (0.0f,  "EXPERT", new Color(0.20f, 0.85f, 0.30f)),  // green
+            (0.33f, "HARD",   new Color(0.95f, 0.85f, 0.15f)),  // yellow
+            (0.66f, "MEDIUM", new Color(0.95f, 0.55f, 0.15f)),  // orange
+            (1.0f,  "EASY",   new Color(0.95f, 0.30f, 0.25f)),  // red
+        };
+
+        EnsureFolders();
+        int playerLayer = GetOrAddLayer("Player");
+
+        var circleSprite = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png", () => MakeCircleTexture(128));
+        var pushSprite   = GetOrCreateSprite("Assets/Sprites/PushHand.png",       () => MakeRectTexture(24, 16));
+        var blockSprite  = GetOrCreateSprite("Assets/Sprites/BlockShield.png",    () => MakeRectTexture(48, 10));
+
+        // Cleanup any prior arenas in the active scene.
+        for (int k = 0; k < tiers.Length; k++)
+            CleanupObject($"Arena_{k}_{tiers[k].label}");
+        CleanupObject("Arena");
+        CleanupObject("StaminaHUD");
+
+        for (int i = 0; i < tiers.Length; i++)
+        {
+            var (hum, label, color) = tiers[i];
+            Vector3 offset = new Vector3(i * ARENA_SPACING, 0f, 0f);
+
+            GameObject arenaGO = new GameObject($"Arena_{i}_{label}");
+            arenaGO.transform.position = offset;
+
+            GameObject center = CreateChild("ArenaCenter", arenaGO);
+            center.transform.localPosition = Vector3.zero;
+
+            var spawnPositions = new Vector3[]
+            {
+                new Vector3(-4f, 0f, 0f), new Vector3(4f, 0f, 0f),
+                new Vector3(0f, 4f, 0f), new Vector3(0f, -4f, 0f),
+            };
+            var spawnGOs = new List<GameObject>();
+            for (int s = 0; s < spawnPositions.Length; s++)
+            {
+                var sp = CreateChild($"SpawnPoint_{s + 1}", arenaGO);
+                sp.transform.localPosition = spawnPositions[s];
+                spawnGOs.Add(sp);
+            }
+
+            // Mirror match: both players same personality, same stats. Only difference is the tier.
+            var p1GO = BuildBotPlayer("Player1", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[0], profileC, personality, model);
+            var p2GO = BuildBotPlayer("Player2", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[1], profileC, personality, model);
+
+            p1GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+            p2GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+
+            // Pin the humanization tier — both players in this arena are at the same level.
+            p1GO.GetComponent<RLAgentBrain>().runtimeHumanization = hum;
+            p2GO.GetComponent<RLAgentBrain>().runtimeHumanization = hum;
+
+            Player p1 = p1GO.GetComponent<Player>();
+            Player p2 = p2GO.GetComponent<Player>();
+            int oppMask = 1 << playerLayer;
+            p1.opponentLayer = oppMask;
+            p2.opponentLayer = oppMask;
+
+            ArenaManager am = arenaGO.AddComponent<ArenaManager>();
+            am.arenaCenter     = center.transform;
+            am.ringOutRadius   = 10f;
+            am.timeUntilShrink = 10f;
+            am.allPlayers      = new List<Player> { p1, p2 };
+            am.spawnPoints     = new List<Transform>();
+            foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+
+            var rl1 = p1GO.GetComponent<RLAgentBrain>();
+            var rl2 = p2GO.GetComponent<RLAgentBrain>();
+            rl1.arenaManager = am; rl1.opponents = new Player[] { p2 };
+            rl2.arenaManager = am; rl2.opponents = new Player[] { p1 };
+            rl1.personality = personality;
+            rl2.personality = personality;
+
+            // Same body color per arena = the tier color. Subtle alpha difference between
+            // P1 and P2 so you can still tell them apart.
+            Color p1Col = color;
+            Color p2Col = new Color(color.r * 0.75f, color.g * 0.75f, color.b * 0.75f);
+            ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite, p1Col);
+            ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite, p2Col);
+            ApplyArenaBoundary(arenaGO, 10f);
+
+            SetHandScale(p1GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p1GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+            SetHandScale(p2GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p2GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+
+            // Label above the ring: tier name in tier color, with delay/noise stats below.
+            int delayMs = Mathf.FloorToInt(hum * 12f) * 20;  // frames × 20ms (50Hz)
+            float noiseSigma = hum * 0.15f;
+            AddDifficultyLabel(arenaGO, label, color,
+                               $"{delayMs}ms delay, σ={noiseSigma:F2}u noise",
+                               yTop: 13.5f);
+
+            EditorUtility.SetDirty(am);
+            EditorUtility.SetDirty(p1GO);
+            EditorUtility.SetDirty(p2GO);
+            Debug.Log($"[DiffShowcase] Arena {i}: {label} (humanization={hum})");
+        }
+
+        // Wide ortho camera — 4 arenas at x=0..75 + label padding.
+        float centerX = (tiers.Length - 1) * ARENA_SPACING * 0.5f;
+        var cam = Camera.main;
+        if (cam == null)
+        {
+            var camGO = new GameObject("Main Camera");
+            camGO.tag = "MainCamera";
+            cam = camGO.AddComponent<Camera>();
+            camGO.AddComponent<AudioListener>();
+        }
+        cam.orthographic       = true;
+        cam.orthographicSize   = 32f;
+        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        cam.clearFlags         = CameraClearFlags.SolidColor;
+        cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
+        EditorUtility.SetDirty(cam.gameObject);
+
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), SHOWCASE_SCENE_PATH);
+
+        var buildScenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!buildScenes.Exists(s => s.path == SHOWCASE_SCENE_PATH))
+            buildScenes.Add(new EditorBuildSettingsScene(SHOWCASE_SCENE_PATH, false));
+        EditorBuildSettings.scenes = buildScenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log($"[DiffShowcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
+                  "  All arenas use PushmanAgent_v39.onnx (Aggressive vs Aggressive mirror, 33-dim obs).\n" +
+                  "  Each arena pins both players to a specific humanization tier — only the\n" +
+                  "  reaction time and observation noise differ between arenas.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. Character Showcase Scene
+    //    5 arenas showing the three CharacterStats archetypes against each other.
+    //    All use the Aggressive personality and the same ONNX so that only the
+    //    physical stats (mass, speed, push/dodge force) differ between arenas.
+    //
+    //    Arenas:
+    //      0 — Default    vs Heavyweight  (avg vs tank)
+    //      1 — Default    vs Speedster    (avg vs glass cannon)
+    //      2 — Heavyweight vs Speedster   (extreme contrast)
+    //      3 — Heavyweight vs Heavyweight (tank mirror — how long do they take to ring each other out?)
+    //      4 — Speedster  vs Speedster   (glass cannon mirror — how fast do they die?)
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/8. Character Showcase Scene")]
+    public static void BuildCharacterShowcaseScene()
+    {
+        const string SHOWCASE_SCENE_PATH = "Assets/Scenes/CharacterShowcase.unity";
+        const string MODELS_FOLDER       = "Assets/MLModels";
+        const string SHARED_ONNX_PATH    = MODELS_FOLDER + "/Pushman_Shared/PushmanAgent_v39.onnx";
+
+        if (System.IO.File.Exists(SHARED_ONNX_PATH))
+            AssetDatabase.ImportAsset(SHARED_ONNX_PATH, ImportAssetOptions.ForceSynchronousImport);
+
+        var sharedModel = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(SHARED_ONNX_PATH);
+        if (sharedModel == null)
+            Debug.LogWarning($"[CharShowcase] Shared ONNX missing at {SHARED_ONNX_PATH}.");
+        else
+            Debug.Log($"[CharShowcase] Loaded model: {System.IO.Path.GetFileName(SHARED_ONNX_PATH)}");
+
+        // Load all three CharacterStats SOs.
+        var statsDefault   = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        var statsHeavy     = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/Heavyweight.asset");
+        var statsSpeedster = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/Speedster.asset");
+
+        // All arenas use Aggressive personality — isolates CharacterStats as the only variable.
+        var personality = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+            "Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        var profileA = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+
+        // Color per archetype — consistent across arenas so viewer can track characters.
+        var colorDefault   = new Color(0.35f, 0.65f, 1.00f);   // blue
+        var colorHeavy     = new Color(0.80f, 0.25f, 0.25f);   // red
+        var colorSpeedster = new Color(0.25f, 0.85f, 0.40f);   // green
+
+        var matchups = new (CharacterStats a, string nameA, Color colA,
+                            CharacterStats b, string nameB, Color colB)[]
+        {
+            (statsDefault,   "Default",    colorDefault,   statsHeavy,     "Heavyweight", colorHeavy),
+            (statsDefault,   "Default",    colorDefault,   statsSpeedster, "Speedster",   colorSpeedster),
+            (statsHeavy,     "Heavyweight",colorHeavy,     statsSpeedster, "Speedster",   colorSpeedster),
+            (statsHeavy,     "Heavyweight",colorHeavy,     statsHeavy,     "Heavyweight", colorHeavy),
+            (statsSpeedster, "Speedster",  colorSpeedster, statsSpeedster, "Speedster",   colorSpeedster),
+        };
+
+        EnsureFolders();
+        int playerLayer = GetOrAddLayer("Player");
+
+        var circleSprite = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png", () => MakeCircleTexture(128));
+        var pushSprite   = GetOrCreateSprite("Assets/Sprites/PushHand.png",       () => MakeRectTexture(24, 16));
+        var blockSprite  = GetOrCreateSprite("Assets/Sprites/BlockShield.png",    () => MakeRectTexture(48, 10));
+
+        for (int k = 0; k < matchups.Length; k++)
+            CleanupObject($"CharArena_{k}");
+        CleanupObject("Arena");
+        CleanupObject("StaminaHUD");
+
+        for (int i = 0; i < matchups.Length; i++)
+        {
+            var (statsA, nameA, colA, statsB, nameB, colB) = matchups[i];
+            Vector3 offset = new Vector3(i * ARENA_SPACING, 0f, 0f);
+
+            GameObject arenaGO = new GameObject($"CharArena_{i}");
+            arenaGO.transform.position = offset;
+
+            GameObject center = CreateChild("ArenaCenter", arenaGO);
+            center.transform.localPosition = Vector3.zero;
+
+            var spawnPositions = new Vector3[]
+            {
+                new Vector3(-4f, 0f, 0f), new Vector3(4f, 0f, 0f),
+                new Vector3( 0f, 4f, 0f), new Vector3(0f, -4f, 0f),
+            };
+            var spawnGOs = new List<GameObject>();
+            for (int s = 0; s < spawnPositions.Length; s++)
+            {
+                var sp = CreateChild($"SpawnPoint_{s + 1}", arenaGO);
+                sp.transform.localPosition = spawnPositions[s];
+                spawnGOs.Add(sp);
+            }
+
+            var p1GO = BuildBotPlayer("Player1", statsA, playerLayer, arenaGO,
+                                      spawnPositions[0], profileA, personality, sharedModel);
+            var p2GO = BuildBotPlayer("Player2", statsB, playerLayer, arenaGO,
+                                      spawnPositions[1], profileA, personality, sharedModel);
+
+            p1GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+            p2GO.GetComponent<BehaviorParameters>().BehaviorName = SHARED_BEHAVIOR_NAME;
+
+            Player p1 = p1GO.GetComponent<Player>();
+            Player p2 = p2GO.GetComponent<Player>();
+            int oppMask = 1 << playerLayer;
+            p1.opponentLayer = oppMask;
+            p2.opponentLayer = oppMask;
+
+            ArenaManager am = arenaGO.AddComponent<ArenaManager>();
+            am.arenaCenter     = center.transform;
+            am.ringOutRadius   = 10f;
+            am.timeUntilShrink = 10f;
+            am.allPlayers      = new List<Player> { p1, p2 };
+            am.spawnPoints     = new List<Transform>();
+            foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+
+            var rl1 = p1GO.GetComponent<RLAgentBrain>();
+            var rl2 = p2GO.GetComponent<RLAgentBrain>();
+            rl1.arenaManager = am; rl1.opponents = new Player[] { p2 };
+            rl2.arenaManager = am; rl2.opponents = new Player[] { p1 };
+            rl1.personality  = personality;
+            rl2.personality  = personality;
+
+            ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite, colA);
+            ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite, colB);
+            ApplyArenaBoundary(arenaGO, 10f);
+
+            SetHandScale(p1GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p1GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+            SetHandScale(p2GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p2GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+
+            // Label shows character names + a one-line stat summary.
+            string statsLineA = $"spd {statsA.movementSpeed}  push {statsA.pushForce}  mass {statsA.weight}";
+            string statsLineB = $"spd {statsB.movementSpeed}  push {statsB.pushForce}  mass {statsB.weight}";
+            AddCharacterLabel(arenaGO, nameA, colA, statsLineA, nameB, colB, statsLineB, yTop: 13.5f);
+
+            EditorUtility.SetDirty(am);
+            EditorUtility.SetDirty(p1GO);
+            EditorUtility.SetDirty(p2GO);
+            Debug.Log($"[CharShowcase] Arena {i}: {nameA} vs {nameB}");
+        }
+
+        float centerX = (matchups.Length - 1) * ARENA_SPACING * 0.5f;
+        var cam = Camera.main;
+        if (cam == null)
+        {
+            var camGO = new GameObject("Main Camera");
+            camGO.tag = "MainCamera";
+            cam = camGO.AddComponent<Camera>();
+            camGO.AddComponent<AudioListener>();
+        }
+        cam.orthographic       = true;
+        cam.orthographicSize   = 38f;
+        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        cam.clearFlags         = CameraClearFlags.SolidColor;
+        cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
+        EditorUtility.SetDirty(cam.gameObject);
+
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), SHOWCASE_SCENE_PATH);
+
+        var buildScenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!buildScenes.Exists(s => s.path == SHOWCASE_SCENE_PATH))
+            buildScenes.Add(new EditorBuildSettingsScene(SHOWCASE_SCENE_PATH, false));
+        EditorBuildSettings.scenes = buildScenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log($"[CharShowcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
+                  "  All arenas: Aggressive vs Aggressive, same ONNX — only CharacterStats differ.\n" +
+                  "  Blue = Default  |  Red = Heavyweight  |  Green = Speedster\n" +
+                  "  Arena 0 — Default vs Heavyweight  (avg vs tank)\n" +
+                  "  Arena 1 — Default vs Speedster    (avg vs glass cannon)\n" +
+                  "  Arena 2 — Heavyweight vs Speedster (extreme contrast)\n" +
+                  "  Arena 3 — Heavyweight mirror       (how long does tank vs tank take?)\n" +
+                  "  Arena 4 — Speedster mirror         (how fast do glass cannons die?)");
+    }
+
+    // Label for Character Showcase: two character names in their colors, stat lines below each.
+    private static void AddCharacterLabel(GameObject arenaGO,
+                                          string nameA, Color colA, string statsA,
+                                          string nameB, Color colB, string statsB,
+                                          float yTop)
+    {
+        var muted = new Color(0.604f, 0.580f, 0.518f);  // Text Secondary #9A9484
+        var dim   = new Color(0.416f, 0.388f, 0.345f);  // Text Muted     #6A6358
+        // 5-label stack: names=2.2u, stats/VS=1.0u. Spaced to avoid overlap.
+        MakeTMPWorldLabel(arenaGO, $"Label_{nameA}",  nameA.ToUpper(),  FontTitle, 2.2f, colA,  new Vector3(0f, yTop + 4.0f, 0f));
+        MakeTMPWorldLabel(arenaGO,  "Label_statsA",   statsA,           FontBody,  1.0f, muted, new Vector3(0f, yTop + 2.2f, 0f));
+        MakeTMPWorldLabel(arenaGO,  "Label_vs",       "VS",             FontBody,  1.0f, dim,   new Vector3(0f, yTop + 0.9f, 0f));
+        MakeTMPWorldLabel(arenaGO, $"Label_{nameB}",  nameB.ToUpper(),  FontTitle, 2.2f, colB,  new Vector3(0f, yTop - 0.8f, 0f));
+        MakeTMPWorldLabel(arenaGO,  "Label_statsB",   statsB,           FontBody,  1.0f, muted, new Vector3(0f, yTop - 2.8f, 0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. Legacy Showcase Scene — historical "before" footage for video/article
+    //
+    //    Loads old 23-dim models that pre-date the v3 obs-space expansion.
+    //    Creates a temporary in-memory Profile_Legacy (23 dims) so the obs
+    //    count matches each model without crashing.
+    //
+    //    Three arenas, each a mirror match (same model on both sides) to
+    //    isolate behavior — we want to see the AI, not who wins:
+    //
+    //      Arena 0 — Baby AI (Fast_v1, 500k steps)
+    //                Near-random: spins, runs past opponent, pushes into walls.
+    //      Arena 1 — Dodge-dominant collapse (RoundRobin_v1 Aggressive, 5M steps)
+    //                All personalities converged here — spams dodge, never pushes.
+    //                The failure mode that motivated the full reward redesign.
+    //      Arena 2 — Phase 2 trained (Master_v1, 20M steps, Aggressive self-play)
+    //                Correct RPS mechanics, real pushes — but single Aggressive
+    //                personality and no aim obs (pushes in wrong direction often).
+    //
+    //    NOTE: these models use BehaviorName="PushmanAgent" (arenas 0+2) or
+    //    "Aggressive" (arena 1). Both differ from the current "Pushman" name —
+    //    that's expected and fine for InferenceOnly showcase.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/9. Legacy Showcase Scene (v1 models)")]
+    public static void BuildLegacyShowcaseScene()
+    {
+        const string SHOWCASE_SCENE_PATH = "Assets/Scenes/LegacyShowcase.unity";
+        const string LEGACY_ASSET_DIR    = "Assets/MLModels/_Legacy";
+
+        // Source paths in results/ (outside Assets — Unity can't load directly from there).
+        // Destination paths are inside Assets/MLModels/_Legacy/ where AssetDatabase can reach them.
+        var arenaModels = new (string srcPath, string assetPath, string behaviorName, int obsSize, string label, string subtitle)[]
+        {
+            (
+                "results/Pushman_Fast_v1/PushmanAgent/PushmanAgent-499995.onnx",
+                $"{LEGACY_ASSET_DIR}/Legacy_BabyAI.onnx",
+                "PushmanAgent",
+                13,   // ONNX verified: obs=[0,13], no LSTM
+                "Baby AI",
+                "500k steps — near random"
+            ),
+            (
+                "results/Pushman_RoundRobin_v1/Aggressive/Aggressive-5021811.onnx",
+                $"{LEGACY_ASSET_DIR}/Legacy_DodgeDominant.onnx",
+                "Aggressive",
+                18,   // ONNX verified: obs=[0,18], LSTM memory=128
+                "Dodge Dominant",
+                "5M steps — reward collapse"
+            ),
+            (
+                "results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.onnx",
+                $"{LEGACY_ASSET_DIR}/Legacy_Phase2.onnx",
+                "PushmanAgent",
+                18,   // ONNX verified: obs=[0,18], LSTM memory=128
+                "Phase 2 Trained",
+                "20M steps — fights but aim broken"
+            ),
+        };
+
+        // Verify source files exist, then copy into Assets so Unity can import them.
+        if (!AssetDatabase.IsValidFolder(LEGACY_ASSET_DIR))
+            AssetDatabase.CreateFolder("Assets/MLModels", "_Legacy");
+
+        foreach (var (srcPath, assetPath, _, _, label, _) in arenaModels)
+        {
+            if (!System.IO.File.Exists(srcPath))
+            {
+                Debug.LogError($"[LegacyShowcase] Missing source model for '{label}': {srcPath}\n" +
+                               "  Ensure results/ folder is present from training runs.");
+                return;
+            }
+            // Copy into Assets and force a synchronous import so LoadAssetAtPath works.
+            System.IO.File.Copy(srcPath, assetPath, overwrite: true);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        // Verified from ONNX input shapes (python onnx.load):
+        //   Fast_v1 (Baby AI):               obs=[0,13] — no selfStats, no selfPersonalityId, no LSTM
+        //   RoundRobin_v1 Aggressive (5M):   obs=[0,18] — selfStats added, no selfPersonalityId, LSTM=128
+        //   Master_v1 (Phase 2, 20M):        obs=[0,18] — same as RoundRobin
+        //
+        // Profiles are saved as .asset files so they survive the Play-mode domain reload.
+        // (CreateInstance<> objects lose their reference after domain reload — Unity serializes null.)
+        const string PROFILE13_PATH = LEGACY_ASSET_DIR + "/Legacy_Profile13.asset";
+        const string PROFILE18_PATH = LEGACY_ASSET_DIR + "/Legacy_Profile18.asset";
+
+        bool p13Exists = AssetDatabase.LoadAssetAtPath<ObservationProfile>(PROFILE13_PATH) != null;
+        ObservationProfile profile13 = p13Exists
+            ? AssetDatabase.LoadAssetAtPath<ObservationProfile>(PROFILE13_PATH)
+            : ScriptableObject.CreateInstance<ObservationProfile>();
+        // kin(3)+stam(1)+state(1)+arena(3)+oppPos(2)+oppVel(2)+oppState(1) = 13
+        profile13.selfKinematics        = true;
+        profile13.selfStamina           = true;
+        profile13.selfState             = true;
+        profile13.selfChargeProgress    = false;
+        profile13.selfRingOutMargin     = false;
+        profile13.arenaBounds           = true;
+        profile13.selfStats             = false;  // not yet added in Fast_v1 era
+        profile13.selfPersonalityId     = false;  // not yet added in Fast_v1 era
+        profile13.opponentPosition      = true;
+        profile13.opponentVelocity      = true;
+        profile13.opponentState         = true;
+        profile13.opponentStateOneHot   = false;
+        profile13.selfFacingOpponentDot = false;
+        profile13.distanceToOpponent    = false;
+        profile13.opponentFacingSelfDot = false;
+        profile13.opponentStats         = false;
+        profile13.humanization          = false;
+        if (!p13Exists) AssetDatabase.CreateAsset(profile13, PROFILE13_PATH);
+        else            EditorUtility.SetDirty(profile13);
+
+        bool p18Exists = AssetDatabase.LoadAssetAtPath<ObservationProfile>(PROFILE18_PATH) != null;
+        ObservationProfile profile18 = p18Exists
+            ? AssetDatabase.LoadAssetAtPath<ObservationProfile>(PROFILE18_PATH)
+            : ScriptableObject.CreateInstance<ObservationProfile>();
+        // same as 13 + selfStats(5) = 18
+        profile18.selfKinematics        = true;
+        profile18.selfStamina           = true;
+        profile18.selfState             = true;
+        profile18.selfChargeProgress    = false;
+        profile18.selfRingOutMargin     = false;
+        profile18.arenaBounds           = true;
+        profile18.selfStats             = true;   // added in RoundRobin era
+        profile18.selfPersonalityId     = false;  // not yet (shared network came later)
+        profile18.opponentPosition      = true;
+        profile18.opponentVelocity      = true;
+        profile18.opponentState         = true;
+        profile18.opponentStateOneHot   = false;
+        profile18.selfFacingOpponentDot = false;
+        profile18.distanceToOpponent    = false;
+        profile18.opponentFacingSelfDot = false;
+        profile18.opponentStats         = false;
+        profile18.humanization          = false;
+        if (!p18Exists) AssetDatabase.CreateAsset(profile18, PROFILE18_PATH);
+        else            EditorUtility.SetDirty(profile18);
+
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[LegacyShowcase] Profile dims: profile13={profile13.ComputeSpaceSize(1)} (expect 13), " +
+                  $"profile18={profile18.ComputeSpaceSize(1)} (expect 18)");
+
+        var aggressive = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+            "Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        var defaultStats = AssetDatabase.LoadAssetAtPath<CharacterStats>(
+            "Assets/ScriptableObjects/Characters/DefaultStats.asset");
+
+        EnsureFolders();
+        int playerLayer = GetOrAddLayer("Player");
+
+        var circleSprite = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png", () => MakeCircleTexture(128));
+        var pushSprite   = GetOrCreateSprite("Assets/Sprites/PushHand.png",       () => MakeRectTexture(24, 16));
+        var blockSprite  = GetOrCreateSprite("Assets/Sprites/BlockShield.png",    () => MakeRectTexture(48, 10));
+
+        for (int k = 0; k < arenaModels.Length; k++)
+            CleanupObject($"LegacyArena_{k}");
+        CleanupObject("Arena");
+        CleanupObject("StaminaHUD");
+
+        // Era colors: red=bad, orange=middling, yellow-green=almost-there
+        var eraColors = new Color[]
+        {
+            new Color(0.90f, 0.25f, 0.25f),   // Arena 0 — red    (baby AI)
+            new Color(0.95f, 0.55f, 0.10f),   // Arena 1 — orange (dodge dominant)
+            new Color(0.70f, 0.90f, 0.20f),   // Arena 2 — lime   (phase 2)
+        };
+
+        for (int i = 0; i < arenaModels.Length; i++)
+        {
+            var (_, assetPath, behaviorName, obsSize, label, subtitle) = arenaModels[i];
+
+            // Select the profile whose obs count matches what this ONNX was trained with.
+            var obsProfile = obsSize == 13 ? profile13 : profile18;
+
+            var model = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+            if (model == null)
+            {
+                Debug.LogWarning($"[LegacyShowcase] Could not load model at {assetPath} — skipping arena {i}.");
+                continue;
+            }
+
+            Vector3 offset = new Vector3(i * ARENA_SPACING, 0f, 0f);
+            GameObject arenaGO = new GameObject($"LegacyArena_{i}");
+            arenaGO.transform.position = offset;
+
+            GameObject center = CreateChild("ArenaCenter", arenaGO);
+            center.transform.localPosition = Vector3.zero;
+
+            var spawnPositions = new Vector3[]
+            {
+                new Vector3(-4f, 0f, 0f), new Vector3(4f, 0f, 0f),
+                new Vector3( 0f, 4f, 0f), new Vector3(0f, -4f, 0f),
+            };
+            var spawnGOs = new List<GameObject>();
+            for (int s = 0; s < spawnPositions.Length; s++)
+            {
+                var sp = CreateChild($"SpawnPoint_{s + 1}", arenaGO);
+                sp.transform.localPosition = spawnPositions[s];
+                spawnGOs.Add(sp);
+            }
+
+            // Mirror match — same model on both sides.
+            var p1GO = BuildBotPlayer("Player1", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[0], obsProfile, aggressive, model);
+            var p2GO = BuildBotPlayer("Player2", defaultStats, playerLayer, arenaGO,
+                                      spawnPositions[1], obsProfile, aggressive, model);
+
+            // Override BehaviorName to match what each old model was trained as.
+            p1GO.GetComponent<BehaviorParameters>().BehaviorName = behaviorName;
+            p2GO.GetComponent<BehaviorParameters>().BehaviorName = behaviorName;
+
+            Player p1 = p1GO.GetComponent<Player>();
+            Player p2 = p2GO.GetComponent<Player>();
+            int oppMask = 1 << playerLayer;
+            p1.opponentLayer = oppMask;
+            p2.opponentLayer = oppMask;
+
+            ArenaManager am = arenaGO.AddComponent<ArenaManager>();
+            am.arenaCenter     = center.transform;
+            am.ringOutRadius   = 10f;
+            am.timeUntilShrink = 30f;
+            am.allPlayers      = new List<Player> { p1, p2 };
+            am.spawnPoints     = new List<Transform>();
+            foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+
+            var rl1 = p1GO.GetComponent<RLAgentBrain>();
+            var rl2 = p2GO.GetComponent<RLAgentBrain>();
+            rl1.arenaManager = am; rl1.opponents = new Player[] { p2 };
+            rl2.arenaManager = am; rl2.opponents = new Player[] { p1 };
+            rl1.personality  = aggressive;
+            rl2.personality  = aggressive;
+
+            Color eraColor = eraColors[i];
+            ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite, eraColor);
+            ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite, eraColor * 0.7f);
+            ApplyArenaBoundary(arenaGO, 10f);
+
+            SetHandScale(p1GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p1GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+            SetHandScale(p2GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
+            SetHandScale(p2GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
+
+            AddTitleSubtitleLabel(arenaGO, label, eraColor, subtitle,
+                                  new Color(0.784f, 0.753f, 0.682f),  // Text Primary #C8C0AE
+                                  yTop: 13.5f);
+
+            EditorUtility.SetDirty(am);
+            EditorUtility.SetDirty(p1GO);
+            EditorUtility.SetDirty(p2GO);
+            Debug.Log($"[LegacyShowcase] Arena {i}: {label} ({assetPath})");
+        }
+
+        float centerX = (arenaModels.Length - 1) * ARENA_SPACING * 0.5f;
+        var cam = Camera.main;
+        if (cam == null)
+        {
+            var camGO = new GameObject("Main Camera");
+            camGO.tag = "MainCamera";
+            cam = camGO.AddComponent<Camera>();
+            camGO.AddComponent<AudioListener>();
+        }
+        cam.orthographic       = true;
+        cam.orthographicSize   = 28f;   // 3 arenas, tighter than 5-arena showcases
+        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        cam.clearFlags         = CameraClearFlags.SolidColor;
+        cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
+        EditorUtility.SetDirty(cam.gameObject);
+
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), SHOWCASE_SCENE_PATH);
+
+        var buildScenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!buildScenes.Exists(s => s.path == SHOWCASE_SCENE_PATH))
+            buildScenes.Add(new EditorBuildSettingsScene(SHOWCASE_SCENE_PATH, false));
+        EditorBuildSettings.scenes = buildScenes.ToArray();
+
+        // profiles are on-disk assets — do not DestroyImmediate
+        AssetDatabase.Refresh();
+        Debug.Log($"[LegacyShowcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
+                  "  Arena 0 (red)    — Baby AI: Fast_v1 at 500k steps\n" +
+                  "  Arena 1 (orange) — Dodge Dominant: RoundRobin_v1 collapse\n" +
+                  "  Arena 2 (lime)   — Phase 2: Master_v1 correct mechanics, aim still broken");
+    }
+
+    // Two-line label with a subtitle beneath — used by Legacy Showcase.
+    private static void AddTitleSubtitleLabel(GameObject arenaGO,
+                                              string title, Color titleColor,
+                                              string subtitle, Color subtitleColor,
+                                              float yTop)
+    {
+        MakeTMPWorldLabel(arenaGO, "Label_title",    title.ToUpper(), FontTitle, 2.8f, titleColor,
+                          new Vector3(0f, yTop + 2.0f, 0f));
+        MakeTMPWorldLabel(arenaGO, "Label_subtitle", subtitle,        FontBody,  1.4f, subtitleColor,
+                          new Vector3(0f, yTop - 0.5f, 0f));
+    }
+
+    // Two-line label: big tier name (colored, Rajdhani), small stats line (Inter, muted).
+    private static void AddDifficultyLabel(GameObject arenaGO, string tierName, Color tierColor,
+                                           string statsLine, float yTop)
+    {
+        MakeTMPWorldLabel(arenaGO, "Label_tier",  tierName.ToUpper(), FontTitle, 2.8f, tierColor,
+                          new Vector3(0f, yTop + 2.0f, 0f));
+        MakeTMPWorldLabel(arenaGO, "Label_stats", statsLine,          FontBody,  1.2f,
+                          new Color(0.604f, 0.580f, 0.518f),  // Text Secondary #9A9484
+                          new Vector3(0f, yTop - 0.5f, 0f));
+    }
+
+    // -----------------------------------------------------------------------
     // 5. Bot vs Bot Scene — both players run ONNX inference, no human input
     // -----------------------------------------------------------------------
 
@@ -163,8 +1041,9 @@ public static class PushmanSetup
     public static void BuildBotVsBotScene()
     {
         // Find the most recently modified ONNX in Assets/MLModels/
+        // Prefer the shared v2 model; fall back to newest if not found.
         const string MODELS_FOLDER = "Assets/MLModels";
-        const string DEFAULT_ONNX  = MODELS_FOLDER + "/Aggressive_Default/PushmanAgent.onnx";
+        const string DEFAULT_ONNX  = MODELS_FOLDER + "/Pushman_Shared/PushmanAgent_v2.onnx";
 
         string onnxPath = DEFAULT_ONNX;
         var allOnnx = AssetDatabase.FindAssets("t:Object", new[] { MODELS_FOLDER });
@@ -290,6 +1169,9 @@ public static class PushmanSetup
         ConfigureBehaviorParameters(go);
         var bp = go.GetComponent<BehaviorParameters>();
         bp.BehaviorType = BehaviorType.InferenceOnly;
+        // Override VectorObservationSize — ConfigureBehaviorParameters always loads Profile_A (33 dims)
+        // but legacy models need 13 or 18 dims depending on when they were trained.
+        bp.BrainParameters.VectorObservationSize = profile != null ? profile.ComputeSpaceSize(1) : OBS_SIZE;
 
         // Assign ONNX model via SerializedObject to avoid hard Barracuda/Sentis type dependency
         if (onnxModel != null)
@@ -538,6 +1420,197 @@ public static class PushmanSetup
                   $"Saved → {TRAINING_SCENE_MIXED_PATH}");
     }
 
+    // -----------------------------------------------------------------------
+    // 3e. Build Round-Robin Training Scene — 15 pairings × 3 arenas = 45 total
+    //     All 5 personalities train simultaneously against each other.
+    //     Pairings: 5 mirrors (self vs self) + 10 cross (C(5,2)).
+    //     Grid: 9 columns × 5 rows. pairing = arenaIndex % 15.
+    //     IMPORTANT: makes round-robin scene the ONLY enabled Build Settings scene.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/3e. Build Round-Robin Training Scene (15 pairings x3)")]
+    public static void BuildRoundRobinTrainingScene()
+    {
+        var arenaPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ARENA_PREFAB_PATH);
+        if (arenaPrefab == null)
+        {
+            Debug.LogError("[PushmanSetup] Arena prefab not found. Run '2. Save Prefabs' first.");
+            return;
+        }
+
+        // Phase 3.5 uses Profile_C (noise + delay + humanization obs, 24 dims).
+        // Switch back to Profile_A here if rebuilding for a clean v2-style run.
+        var profileC = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_C.asset");
+        if (profileC == null)
+            Debug.LogWarning("[PushmanSetup] Profile_C not found — falling back to Profile_A.");
+        var profile = profileC ?? AssetDatabase.LoadAssetAtPath<ObservationProfile>(
+            "Assets/ScriptableObjects/Observation/Profile_A.asset");
+
+        string[] personalityNames = { "Aggressive", "Defensive", "Evasive", "Balanced", "Counter" };
+        var personalities = new BotPersonality[5];
+        for (int i = 0; i < 5; i++)
+        {
+            personalities[i] = AssetDatabase.LoadAssetAtPath<BotPersonality>(
+                $"Assets/ScriptableObjects/Personalities/{personalityNames[i]}.asset");
+            if (personalities[i] == null)
+                Debug.LogWarning($"[PushmanSetup] Personality asset not found: {personalityNames[i]}.asset");
+        }
+
+        var defaultStats   = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        var heavyStats     = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Heavyweight.asset");
+        var speedsterStats = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Speedster.asset");
+
+        // Build pairing table: 5 mirrors + 10 cross pairings = 15 total
+        var pairings = new List<(int a, int b)>();
+        for (int i = 0; i < 5; i++) pairings.Add((i, i));                           // mirrors
+        for (int i = 0; i < 5; i++) for (int j = i + 1; j < 5; j++) pairings.Add((i, j)); // cross
+
+        const int TOTAL_ARENAS = 45;    // 15 pairings × 3
+        const int GRID_COLS    = 9;
+
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+        for (int idx = 0; idx < TOTAL_ARENAS; idx++)
+        {
+            int col = idx % GRID_COLS;
+            int row = idx / GRID_COLS;
+            Vector3 offset = new Vector3(col * ARENA_SPACING, row * ARENA_SPACING, 0f);
+
+            GameObject arenaGO = PrefabUtility.InstantiatePrefab(arenaPrefab) as GameObject;
+            arenaGO.name = $"Arena_{idx}";
+            arenaGO.transform.position = offset;
+
+            ArenaManager am = arenaGO.GetComponent<ArenaManager>();
+            if (am != null)
+            {
+                am.statsPool = new List<CharacterStats>();
+                if (defaultStats   != null) am.statsPool.Add(defaultStats);
+                if (heavyStats     != null) am.statsPool.Add(heavyStats);
+                if (speedsterStats != null) am.statsPool.Add(speedsterStats);
+
+                var (pA, pB) = pairings[idx % 15];
+                WireRoundRobinArena(arenaGO, am, profile, personalities, personalityNames, pA, pB);
+            }
+
+            EditorUtility.DisplayProgressBar("Building Round-Robin Training Scene",
+                $"Arena {idx + 1}/{TOTAL_ARENAS}", (float)(idx + 1) / TOTAL_ARENAS);
+        }
+
+        EditorUtility.ClearProgressBar();
+        EnsureFolders();
+        EditorSceneManager.SaveScene(scene, TRAINING_SCENE_ROUNDROBIN_PATH);
+
+        // Make round-robin the ONLY enabled scene in Build Settings so the standalone
+        // build doesn't silently train the wrong scene.
+        var existingScenes = EditorBuildSettings.scenes;
+        var newScenes = new List<EditorBuildSettingsScene>();
+        bool found = false;
+        foreach (var s in existingScenes)
+        {
+            bool isRR = s.path == TRAINING_SCENE_ROUNDROBIN_PATH;
+            newScenes.Add(new EditorBuildSettingsScene(s.path, isRR));
+            if (isRR) found = true;
+        }
+        if (!found)
+            newScenes.Insert(0, new EditorBuildSettingsScene(TRAINING_SCENE_ROUNDROBIN_PATH, true));
+        EditorBuildSettings.scenes = newScenes.ToArray();
+
+        AssetDatabase.Refresh();
+
+        // Coverage summary
+        var coverage = new int[5, 5];
+        for (int idx = 0; idx < TOTAL_ARENAS; idx++)
+        {
+            var (pA, pB) = pairings[idx % 15];
+            coverage[pA, pB]++;
+        }
+        string coverageLog = "[PushmanSetup] Pairing arena counts:";
+        for (int i = 0; i < 5; i++)
+            for (int j = i; j < 5; j++)
+                coverageLog += $"\n  {personalityNames[i]} vs {personalityNames[j]}: {coverage[i, j]}";
+        Debug.Log(coverageLog);
+
+        Debug.Log($"[PushmanSetup] Round-Robin scene: 45 arenas (9×5), 15 pairings × 3. " +
+                  $"Saved → {TRAINING_SCENE_ROUNDROBIN_PATH}. " +
+                  $"Round-robin is now the only ENABLED Build Settings scene — rebuild standalone before training.");
+    }
+
+    // Wire a round-robin arena: both players are RLAgentBrain, each assigned a pairing personality
+    // and a behavior name matching the ppo_roundrobin.yaml behaviors: block.
+    private static void WireRoundRobinArena(GameObject arenaGO, ArenaManager am,
+                                             ObservationProfile profile,
+                                             BotPersonality[] personalities,
+                                             string[] personalityNames,
+                                             int pA, int pB)
+    {
+        am.allPlayers  = new List<Player>(arenaGO.GetComponentsInChildren<Player>());
+        am.spawnPoints = new List<Transform>();
+        am.arenaCenter = arenaGO.transform.Find("ArenaCenter");
+
+        for (int i = 1; i <= 4; i++)
+        {
+            Transform sp = arenaGO.transform.Find($"SpawnPoint_{i}");
+            if (sp != null) am.spawnPoints.Add(sp);
+        }
+
+        var p1GO = arenaGO.transform.Find("Player1")?.gameObject;
+        var p2GO = arenaGO.transform.Find("Player2")?.gameObject;
+        if (p1GO == null || p2GO == null)
+        {
+            Debug.LogWarning($"[PushmanSetup] {arenaGO.name}: Player1 or Player2 missing — skipping.");
+            return;
+        }
+
+        WireRLPlayerForRR(p1GO, p2GO, am, profile, personalities[pA], personalityNames[pA]);
+        WireRLPlayerForRR(p2GO, p1GO, am, profile, personalities[pB], personalityNames[pB]);
+
+        // Both players on team 0 — required for PPO round-robin training without self-play.
+        // When self-play is active (v37/v38), set Player2 TeamId = 1 manually or re-add here.
+        // With different TeamIds and no self_play: block, PPO silently skips team1 gradient updates.
+        var bp1 = p1GO.GetComponent<BehaviorParameters>();
+        var bp2 = p2GO.GetComponent<BehaviorParameters>();
+        if (bp1 != null) { bp1.TeamId = 0; EditorUtility.SetDirty(bp1); }
+        if (bp2 != null) { bp2.TeamId = 0; EditorUtility.SetDirty(bp2); }
+
+        EditorUtility.SetDirty(am);
+        EditorUtility.SetDirty(arenaGO);
+    }
+
+    private static void WireRLPlayerForRR(GameObject playerGO, GameObject opponentGO,
+                                           ArenaManager am, ObservationProfile profile,
+                                           BotPersonality personality, string behaviorName)
+    {
+        var rl = playerGO.GetComponent<RLAgentBrain>();
+        if (rl == null) { Debug.LogWarning($"[PushmanSetup] {playerGO.name} has no RLAgentBrain."); return; }
+
+        rl.arenaManager       = am;
+        rl.observationProfile = profile;
+        rl.personality        = personality;
+        rl.opponents          = new Player[] { opponentGO.GetComponent<Player>() };
+
+        // Override serialized prefab values with updated mechanics — prefab may have old defaults.
+        var playerComp = playerGO.GetComponent<Player>();
+        if (playerComp != null) { playerComp.pushHitRadius = 0.8f; EditorUtility.SetDirty(playerComp); }
+
+        var bp = playerGO.GetComponent<BehaviorParameters>();
+        if (bp == null) bp = playerGO.AddComponent<BehaviorParameters>();
+        // Phase 3 v2 shared network: ALL agents use the same BehaviorName so experience
+        // flows into ONE network. Personality differentiation comes from the per-agent
+        // BotPersonality SO (rewards) + the self-personality observation.
+        // `behaviorName` arg is kept for API compatibility but ignored here.
+        bp.BehaviorName = SHARED_BEHAVIOR_NAME;
+        bp.BehaviorType = BehaviorType.Default;
+
+        int obsSize = profile != null ? profile.ComputeSpaceSize(1) : OBS_SIZE;
+        bp.BrainParameters.VectorObservationSize          = obsSize;
+        bp.BrainParameters.NumStackedVectorObservations   = 1;
+        bp.BrainParameters.ActionSpec                     = ActionSpec.MakeDiscrete(3, 3, 3, 4);
+
+        EditorUtility.SetDirty(rl);
+        EditorUtility.SetDirty(bp);
+    }
+
     // Wire a mixed arena: Player1 stays as RLAgentBrain; Player2 is replaced by a scripted bot
     // rotating through Chase → Standing → Dodging based on arenaIndex % 3.
     private static void WireMixedArena(GameObject arenaGO, ArenaManager am,
@@ -610,14 +1683,12 @@ public static class PushmanSetup
 
         // --- Create sprite assets ---
         Sprite circleSprite  = GetOrCreateSprite("Assets/Sprites/PlayerCircle.png",
-                                   () => MakeCircleTexture(64));
+                                   () => MakeCircleTexture(128));
         Sprite pushSprite    = GetOrCreateSprite("Assets/Sprites/PushHand.png",
                                    () => MakeRectTexture(24, 16));
         Sprite blockSprite   = GetOrCreateSprite("Assets/Sprites/BlockShield.png",
                                    () => MakeRectTexture(48, 10));
-        Sprite ringSprite    = GetOrCreateSprite("Assets/Sprites/ArenaBoundary.png",
-                                   () => MakeRingTexture(256, 8));
-        if (circleSprite == null || pushSprite == null || blockSprite == null || ringSprite == null)
+        if (circleSprite == null || pushSprite == null || blockSprite == null)
         {
             Debug.LogError("[PushmanSetup] Failed to create one or more sprite assets.");
             return;
@@ -641,7 +1712,7 @@ public static class PushmanSetup
         // --- Arena boundary ring ---
         GameObject arenaGO = GameObject.Find("Arena");
         if (arenaGO != null)
-            ApplyArenaBoundary(arenaGO, ringSprite, ringOutRadius: 10f);
+            ApplyArenaBoundary(arenaGO, ringOutRadius: 10f);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("[PushmanSetup] Sprites + screen-space HUD applied. Green=P1 (bottom-left), Red=P2 (bottom-right).");
@@ -665,10 +1736,10 @@ public static class PushmanSetup
         DestroyChild(playerGO, "StaminaBarFill");
         DestroyChild(playerGO, "StaminaCanvas");
 
-        // Push hand — large bright-white fist held in front; size makes the attack read clearly
-        // from the static camera. (Sprite native 0.24×0.16u → ×1.6 = 0.38×0.26u vs 0.64u body.)
+        // Push hand — bright-white fist held in front of the player body (radius=0.64u @ 128px).
+        // localPos y=0.75 puts it just outside the body edge so it's visible, not buried inside.
         var pushHand = MakeHandChild("PushHand", playerGO, pushSpr, Color.white,
-                                    localPos: new Vector3(0f, 0.58f, 0f),
+                                    localPos: new Vector3(0f, 0.75f, 0f),
                                     localScale: new Vector3(1.6f, 1.6f, 1f),
                                     sortOrder: 2);
         pushHand.SetActive(false);
@@ -676,7 +1747,7 @@ public static class PushmanSetup
         // Block shield — large cyan plate hugging the body front; size makes the block state
         // unmistakable. (Sprite native 0.48×0.10u → 0.72×0.18u — was a 0.018u hairline.)
         var blockHand = MakeHandChild("BlockHand", playerGO, blockSpr, new Color(0.35f, 0.8f, 1f),
-                                     localPos: new Vector3(0f, 0.46f, 0f),
+                                     localPos: new Vector3(0f, 0.62f, 0f),
                                      localScale: new Vector3(1.5f, 1.8f, 1f),
                                      sortOrder: 2);
         blockHand.SetActive(false);
@@ -694,25 +1765,45 @@ public static class PushmanSetup
         EditorUtility.SetDirty(playerGO);
     }
 
-    // Create or refresh the ring outline that marks the ring-out boundary.
-    private static void ApplyArenaBoundary(GameObject arenaGO, Sprite ring, float ringOutRadius)
+    // Create or refresh the arena visual: dark filled floor disc + Amber ring border.
+    // Both sprites are 512×512 px at 100 PPU = 5.12 units native; scaled to ringOutRadius*2.
+    private static void ApplyArenaBoundary(GameObject arenaGO, float ringOutRadius)
     {
+        // Remove legacy single-sprite child and any prior floor/border children.
         DestroyChild(arenaGO, "ArenaBoundary");
+        DestroyChild(arenaGO, "ArenaFloor");
+        DestroyChild(arenaGO, "ArenaBorder");
 
-        var go = new GameObject("ArenaBoundary");
-        go.transform.SetParent(arenaGO.transform);
+        var floorSprite  = GetOrCreateSprite("Assets/Sprites/ArenaFloor.png",
+                               () => MakeArenaFloorTexture(512));
+        var borderSprite = GetOrCreateSprite("Assets/Sprites/ArenaBorder.png",
+                               () => MakeRingTexture(512, 24));
+
+        const float PPU = 100f;
+        const float TEX = 512f;
+        float scale = (ringOutRadius * 2f) / (TEX / PPU);
+
+        // Floor disc — dark surface, rendered behind everything.
+        MakeBoundaryChild(arenaGO, "ArenaFloor",  floorSprite,
+                          Color.white, scale, sortOrder: -2);
+
+        // Amber Bright ring border — brighter variant for dark-bg contrast.
+        MakeBoundaryChild(arenaGO, "ArenaBorder", borderSprite,
+                          new Color(0.910f, 0.753f, 0.408f), scale, sortOrder: -1);  // #E8C068
+    }
+
+    private static void MakeBoundaryChild(GameObject parent, string name,
+                                          Sprite sprite, Color color,
+                                          float scale, int sortOrder)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent.transform);
         go.transform.localPosition = Vector3.zero;
-
-        // Ring texture is 256×256 px. At Unity's default 100 PPU it spans 2.56 units.
-        // Scale so it matches ringOutRadius * 2.
-        float scale = (ringOutRadius * 2f) / (256f / 100f);
-        go.transform.localScale = new Vector3(scale, scale, 1f);
-
+        go.transform.localScale    = new Vector3(scale, scale, 1f);
         var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite       = ring;
-        sr.color        = new Color(1f, 1f, 1f, 0.45f);
-        sr.sortingOrder = -1;  // behind players
-
+        sr.sprite       = sprite;
+        sr.color        = color;
+        sr.sortingOrder = sortOrder;
         EditorUtility.SetDirty(go);
     }
 
@@ -888,21 +1979,177 @@ public static class PushmanSetup
     }
 
     // -----------------------------------------------------------------------
+    // ContentKit font helpers (world-space TextMeshPro labels)
+    // -----------------------------------------------------------------------
+
+    // Cached font assets — loaded once per editor session from Assets/Fonts/.
+    private static TMP_FontAsset s_fontTitle;  // Rajdhani-Medium SDF  (headings)
+    private static TMP_FontAsset s_fontBody;   // Inter-Regular SDF    (body / stats)
+
+    private static TMP_FontAsset FontTitle =>
+        s_fontTitle != null ? s_fontTitle :
+        (s_fontTitle = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+            "Assets/Fonts/Rajdhani-Medium SDF.asset"));
+
+    private static TMP_FontAsset FontBody =>
+        s_fontBody != null ? s_fontBody :
+        (s_fontBody = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+            "Assets/Fonts/Inter-Regular SDF.asset"));
+
+    // TMP 3D renders text at ~fontSize × 0.127 world units (measured empirically from mesh bounds).
+    // Scaling the label GO by the inverse makes fontSize values specify world-unit height directly:
+    //   fontSize=2.8 → label GO scale 7.84 → text appears 2.8 world units tall in the scene.
+    private const float TMP_WORLD_CORRECTION = 7.84f;
+
+    /// <summary>
+    /// Creates a world-space TextMeshPro label as a child of <paramref name="parent"/>.
+    /// <paramref name="fontSize"/> is the desired text height in world units.
+    /// A scale correction (TMP_WORLD_CORRECTION) is applied to the GO so the fontSize
+    /// directly equals world-unit height (TMP 3D otherwise renders at ~0.127× the specified pt size).
+    /// </summary>
+    private static void MakeTMPWorldLabel(GameObject parent, string goName, string text,
+                                           TMP_FontAsset font, float fontSize, Color color,
+                                           Vector3 localPos, float rectWidth = 24f)
+    {
+        var go = new GameObject(goName);
+        // Set parent first so hierarchy is correct before adding RectTransform.
+        go.transform.SetParent(parent.transform, false);
+        go.transform.localPosition = localPos;
+
+        // Pre-create RectTransform before adding TextMeshPro.
+        // Without this TMP creates a zero-size rect in edit mode, clipping all text.
+        var rt = go.AddComponent<RectTransform>();
+        rt.localPosition = localPos;   // re-apply — AddComponent may reset it
+        // Scale correction: makes fontSize == desired world-unit height.
+        rt.localScale    = new Vector3(TMP_WORLD_CORRECTION, TMP_WORLD_CORRECTION, 1f);
+        // sizeDelta in LOCAL (pre-scale) units; wide/tall enough to never clip (Overflow mode).
+        rt.sizeDelta     = new Vector2(rectWidth  / TMP_WORLD_CORRECTION,
+                                       Mathf.Max(0.5f, fontSize * 1.5f / TMP_WORLD_CORRECTION));
+
+        var tmp = go.AddComponent<TextMeshPro>();
+        tmp.text             = text;
+        tmp.fontSize         = fontSize;
+        tmp.color            = color;
+        tmp.alignment        = TextAlignmentOptions.Center;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
+        tmp.overflowMode     = TextOverflowModes.Overflow;
+        if (font != null)
+            tmp.font = font;
+        else
+            Debug.LogWarning($"[PushmanSetup] Font asset null for '{goName}' — check Assets/Fonts/*.asset paths.");
+
+        // Render above arena visuals; TMP MeshRenderer is on the same GO.
+        var mr = go.GetComponent<Renderer>();
+        if (mr != null) mr.sortingOrder = 5;
+
+        EditorUtility.SetDirty(go);
+    }
+
+    // -----------------------------------------------------------------------
+    // Personality helpers
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// ContentKit data-series colors — one distinct hue per personality.
+    /// Amber / Steel / Mauve / Sage / Terra from the design system palette.
+    /// </summary>
+    // ContentKit "Bright" variants of the five data-series colors.
+    // The base data-series colors (#C49A3C etc.) are calibrated for 1px chart lines on
+    // medium backgrounds; the Bright variants have the luminosity needed for filled
+    // shapes on the near-black Void (#111009) background.
+    // Amber Bright + Steel Bright are spec'd in ContentKit; Sage/Mauve/Terra Bright are
+    // computed at the same +~20% lightness offset to maintain palette consistency.
+    private static Color PersonalityColor(string name) => name switch
+    {
+        "Aggressive" => new Color(0.910f, 0.753f, 0.408f),  // Amber Bright  #E8C068
+        "Defensive"  => new Color(0.604f, 0.667f, 0.733f),  // Steel Bright  #9AAABB
+        "Balanced"   => new Color(0.604f, 0.733f, 0.525f),  // Sage Bright   #9ABB86
+        "Evasive"    => new Color(0.722f, 0.596f, 0.800f),  // Mauve Bright  #B898CC
+        "Counter"    => new Color(0.863f, 0.596f, 0.471f),  // Terra Bright  #DC9878
+        _            => Color.white,
+    };
+
+    /// <summary>
+    /// Adds a three-line TMP label above the arena: P1 name (Rajdhani, personality color) /
+    /// "VS" (Inter, muted) / P2 name (Rajdhani, personality color).
+    /// fontSize values are world-unit heights (TMP_WORLD_CORRECTION handles the TMP internal scale).
+    /// Vertical spacing must be > text height to avoid overlap; title=2.8u, VS=1.4u.
+    /// </summary>
+    private static void AddArenaLabel(GameObject arenaGO, string p1Name, Color p1Color,
+                                       string p2Name, Color p2Color, float yTop)
+    {
+        MakeTMPWorldLabel(arenaGO, $"Label_{p1Name}", p1Name.ToUpper(),
+                          FontTitle, 2.8f, p1Color,
+                          new Vector3(0f, yTop + 3.0f, 0f));
+        MakeTMPWorldLabel(arenaGO, "Label_vs", "VS",
+                          FontBody, 1.4f, new Color(0.416f, 0.388f, 0.345f),  // Text Muted #6A6358
+                          new Vector3(0f, yTop + 0.5f, 0f));
+        MakeTMPWorldLabel(arenaGO, $"Label_{p2Name}", p2Name.ToUpper(),
+                          FontTitle, 2.8f, p2Color,
+                          new Vector3(0f, yTop - 2.0f, 0f));
+    }
+
+    // -----------------------------------------------------------------------
     // Sprite texture factories
     // -----------------------------------------------------------------------
 
-    // Filled white circle on a transparent background.
+    // 128×128 player disc with a directional chevron baked in.
+    // Body pixels = (0.72, 0.72, 0.72, 1) so they appear slightly dimmed after tinting.
+    // Chevron pixels = (1, 1, 1, 1) — full brightness, points toward sprite +Y (player forward).
+    // The SpriteRenderer tint (personality color) multiplies uniformly; the chevron stays
+    // visibly brighter than the body, making facing direction legible from the overhead camera.
     private static Texture2D MakeCircleTexture(int size)
     {
         var tex    = new Texture2D(size, size, TextureFormat.RGBA32, false);
         var pixels = new Color[size * size];
         float c = size * 0.5f;
-        float r = c - 1f;
+        float r = c - 1.5f;
+
+        // Chevron geometry in (dx, dy) space centered at circle origin.
+        // Tip at (0, 0.78r), base corners at (±0.25r, 0.30r).
+        // Any point inside the filled triangle is part of the chevron.
+        float chevTipY  = 0.78f * r;
+        float chevBaseY = 0.30f * r;
+        float chevHW    = 0.25f * r;   // half-width at base
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - c;
+                float dy = y + 0.5f - c;   // positive dy = upward in texture = sprite +Y
+
+                // Outside the disc — transparent.
+                if (dx * dx + dy * dy > r * r) { pixels[y * size + x] = Color.clear; continue; }
+
+                // Inside chevron triangle?
+                bool inChev = dy >= chevBaseY && dy <= chevTipY &&
+                              Mathf.Abs(dx) <= chevHW * (1f - (dy - chevBaseY) / (chevTipY - chevBaseY));
+
+                pixels[y * size + x] = inChev
+                    ? new Color(1.00f, 1.00f, 1.00f, 1f)   // chevron — full white (tint × 1.0 = personality color)
+                    : new Color(0.80f, 0.80f, 0.80f, 1f);  // body — 80% so chevron reads 25% brighter
+            }
+        }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return tex;
+    }
+
+    // Filled disc in ContentKit Surface color (#1E1C16) — used as the arena floor.
+    private static Texture2D MakeArenaFloorTexture(int size)
+    {
+        var tex    = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var pixels = new Color[size * size];
+        float c    = size * 0.5f;
+        float r    = c - 1.5f;
+        var floor  = new Color(0.118f, 0.110f, 0.086f, 1f);  // Surface #1E1C16 — ContentKit surface color
+
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)
             {
                 float dx = x + 0.5f - c, dy = y + 0.5f - c;
-                pixels[y * size + x] = (dx * dx + dy * dy <= r * r) ? Color.white : Color.clear;
+                pixels[y * size + x] = (dx * dx + dy * dy <= r * r) ? floor : Color.clear;
             }
         tex.SetPixels(pixels);
         tex.Apply();
@@ -910,12 +2157,13 @@ public static class PushmanSetup
     }
 
     // Ring (annulus) outline on a transparent background.
+    // Tinted to ContentKit Amber at the call site (ApplyArenaBoundary).
     private static Texture2D MakeRingTexture(int size, float borderPx)
     {
         var tex    = new Texture2D(size, size, TextureFormat.RGBA32, false);
         var pixels = new Color[size * size];
         float c      = size * 0.5f;
-        float outer  = c - 1f;
+        float outer  = c - 1.5f;
         float inner  = outer - borderPx;
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)
@@ -989,6 +2237,12 @@ public static class PushmanSetup
         sr.color        = color;
         sr.sortingOrder = sortOrder;
         return go;
+    }
+
+    private static void SetHandScale(GameObject playerGO, string childName, Vector3 scale)
+    {
+        var t = playerGO.transform.Find(childName);
+        if (t != null) { t.localScale = scale; EditorUtility.SetDirty(t.gameObject); }
     }
 
     private static void DestroyChild(GameObject parent, string childName)
@@ -1150,6 +2404,7 @@ public static class PushmanSetup
 
         var player = go.AddComponent<Player>();
         player.stats = stats;
+        player.pushHitRadius = 0.8f;   // larger than prefab default — makes push easier to land
 
         go.AddComponent<PlayerMovingState>();
         go.AddComponent<PlayerChargingState>();
@@ -1167,7 +2422,9 @@ public static class PushmanSetup
         var bp = go.GetComponent<BehaviorParameters>();
         if (bp == null) bp = go.AddComponent<BehaviorParameters>();
 
-        bp.BehaviorName = "PushmanAgent";
+        // Match the shared-network behavior name used by Phase 3 v2 training so test
+        // and inference scenes can load the same ONNX.
+        bp.BehaviorName = SHARED_BEHAVIOR_NAME;
         bp.BehaviorType = BehaviorType.Default; // Default = trainer controls; change to HeuristicOnly for manual play
 
         // Derive space size from the ObservationProfile asset so it stays in sync
@@ -1261,15 +2518,13 @@ public static class PushmanSetup
         stats.blockStaminaUsageRate = 15f;
         stats.regenBoostThreshold   = 0.75f;
         stats.regenBoostMultiplier  = 2.5f;
-        stats.allowDodgeOverdraft   = true;
-        stats.overdraftPauseDuration= 1.5f;
-        stats.dodgeForce            = 18f;
+        stats.dodgeForce            = 9f;   // reduced: dodge is evasive, not a ring-out tool
         stats.dodgeStamina          = 40f;
         stats.dodgeTime             = 0.25f;
-        stats.pushForce             = 8f;
+        stats.pushForce             = 12f;  // increased: push is the ring-out tool
         stats.pushStamina           = 20f;
         stats.pushChargeMultiplier  = 1.5f;
-        stats.pushChargeTime        = 1f;
+        stats.pushChargeTime        = 0.25f;  // short charge: less vulnerability window, tighter credit assignment
         EditorUtility.SetDirty(stats);
     }
 }

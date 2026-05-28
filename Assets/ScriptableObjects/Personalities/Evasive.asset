@@ -12,14 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 99a020ff7bfb5912daba2423f6304cb8, type: 3}
   m_Name: Evasive
   m_EditorClassIdentifier: Assembly-CSharp::BotPersonality
-  winRound: 1.5
-  loseRound: -1.5
-  landPushHit: 0.1
-  takePushHit: -0.3
-  successfulBlock: 0.02
+  id: 2
+  winRound: 10.0
+  loseRound: -10.0
+  landPushHit: 0.03
+  takePushHit: -0.08
+  successfulBlock: 0.04
   pushBlocked: 0
-  dodgeEvasionReward: 0.25
-  dodgeHitReward: 0.2
+  edgeHitBonus: 0.4
+  dodgeEvasionReward: 0.1
+  dodgeHitReward: 0.02
+  dodgeMissedPenalty: -0.06
   facingOpponentMultiplier: 0.0001
   wastedStaminaMultiplier: -0.03
   opponentEdgePressureMultiplier: 0.0003

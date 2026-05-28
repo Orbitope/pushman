@@ -53,10 +53,6 @@ public class StaminaHUD : MonoBehaviour
         UpdateScores();
     }
 
-    // Exposed for other scripts (e.g. CameraShake, VFX) that want to react to overdraft state.
-    public bool Player1RegenPaused => player1 != null && player1.RegenPaused;
-    public bool Player2RegenPaused => player2 != null && player2.RegenPaused;
-
     private void UpdateScores()
     {
         if (arenaManager == null || (p1ScoreText == null && p2ScoreText == null)) return;
@@ -68,21 +64,12 @@ public class StaminaHUD : MonoBehaviour
     {
         if (fill == null || player == null || player.stats == null) return;
 
-        // Clamp for display — stamina can go negative during overdraft dodge.
         float ratio = Mathf.Clamp01(player.currentStamina / player.stats.maxStamina);
-
-        // Smooth lerp toward target — snappy enough to feel responsive, slow enough to read.
         fill.fillAmount = Mathf.Lerp(fill.fillAmount, ratio, Time.deltaTime * 8f);
 
-        if (player.RegenPaused)
+        if (ratio < 0.25f)
         {
-            // Pulsing dark red ↔ gray: overdraft lockout — regen is completely blocked.
-            float pulse = Mathf.PingPong(Time.time * 3f, 1f);
-            fill.color = Color.Lerp(new Color(0.55f, 0.08f, 0.08f), new Color(0.30f, 0.30f, 0.30f), pulse);
-        }
-        else if (ratio < 0.25f)
-        {
-            // Orange-red flash when below 25% stamina (but regen is still working).
+            // Orange-red flash when below 25% stamina.
             fill.color = Color.Lerp(new Color(1f, 0.25f, 0.1f), baseColor, ratio / 0.25f);
         }
         else

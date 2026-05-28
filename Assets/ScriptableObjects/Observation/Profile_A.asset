@@ -15,12 +15,18 @@ MonoBehaviour:
   selfKinematics: 1
   selfStamina: 1
   selfState: 1
+  selfChargeProgress: 1
+  selfRingOutMargin: 1
   arenaBounds: 1
   opponentPosition: 1
   opponentVelocity: 1
-  opponentState: 1
-  useFOV: 0
-  fieldOfViewAngle: 120
+  opponentState: 0
+  opponentStateOneHot: 1
+  selfFacingOpponentDot: 1
+  distanceToOpponent: 1
+  opponentFacingSelfDot: 1
+  selfPersonalityId: 1
   applyNoise: 0
   positionNoiseMagnitude: 0.05
   observationDelayFrames: 0
+  humanization: 0

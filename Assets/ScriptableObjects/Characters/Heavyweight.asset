@@ -12,15 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ca141a1e2f8234e9e8651c1377505249, type: 3}
   m_Name: Heavyweight
   m_EditorClassIdentifier: Assembly-CSharp::CharacterStats
-  weight: 2.5
+  weight: 2
   movementSpeed: 4
   maxStamina: 80
   staminaRegenRate: 6
   blockStaminaUsageRate: 10
-  dodgeForce: 14
-  dodgeStamina: 50
+  dodgeForce: 11
+  dodgeStamina: 35
   dodgeTime: 0.2
-  pushForce: 9
+  pushForce: 7
   pushStamina: 30
-  pushChargeMultiplier: 1.5
-  pushChargeTime: 1.2
+  pushChargeMultiplier: 1
+  pushChargeTime: 0.3

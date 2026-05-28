@@ -44,6 +44,18 @@ if $STANDALONE; then
     # Preferred: Unity Server Build folder (genuinely headless — no graphics pipeline init).
     BUILD="$BUILD_DIR/Pushman"
     echo "[train.sh] Mode: STANDALONE (Server Build)  binary=$BUILD"
+    # gRPC native lib lives in PlugIns/ but the loader searches Data/Managed/ — recreate
+    # symlink every launch since a fresh build wipes Data/Managed/.
+    GRPC_SRC="$BUILD_DIR/PlugIns/libgrpc_csharp_ext.x64.bundle"
+    GRPC_DST="$BUILD_DIR/Data/Managed/libgrpc_csharp_ext.x64.bundle"
+    if [ -f "$GRPC_SRC" ]; then
+      # Use a path relative to the symlink's own directory so it resolves correctly
+      # regardless of where train.sh is invoked from.
+      ln -sf "../../PlugIns/libgrpc_csharp_ext.x64.bundle" "$GRPC_DST"
+      echo "[train.sh] gRPC symlink refreshed."
+    else
+      echo "WARNING: gRPC bundle not found at $GRPC_SRC — communication may fail."
+    fi
   elif [ -d "$BUILD_DIR.app" ]; then
     # Fallback: regular macOS .app — still works but slower (inits graphics even with --no-graphics).
     BUILD="$BUILD_DIR"

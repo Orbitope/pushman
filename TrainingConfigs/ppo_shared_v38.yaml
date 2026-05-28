@@ -1,0 +1,84 @@
+# Pushman — Phase 3.8: Longer fights via reduced knockback
+#
+# Warm-starts from v37's 30M checkpoint.
+#
+# Physics changes from v37:
+#   - Player_RL.prefab linear drag: 2 → 4
+#     Movement uses SetVelocity (drag-immune), so locomotion feel is unchanged.
+#     Pushed players decelerate twice as fast → center-of-ring full-charge is a
+#     near-ring-out (4.5 units travel) instead of guaranteed ring-out (11+ units).
+#   - pushChargeMultiplier: 1.5 → 1.0 (DefaultStats + Heavyweight; Speedster was already 1.0)
+#   - Heavyweight pushForce: 11 → 7
+#     Heavyweight's high mass makes it hard to ring out. Without a pushForce nerf it could still
+#     one-shot others while being nearly invulnerable. Now identity is "true tank": weak puncher
+#     (7×2=14 impulse → 3.5u on Default), takes ~2 hits to ring out (mass reduced 2.5→2.0 so
+#     Default's 18 impulse moves them 2.25u — reachable with good positioning, not 3+ hit war).
+#
+# Max travel at full charge (post-change):
+#   Default  (mass 1.0): 9×2=18 impulse → 4.5u vs Default, 2.25u vs Heavyweight, 7.5u vs Speedster
+#   Heavyweight (mass 2.0): 7×2=14 impulse → 3.5u vs Default — near-ring-out, not instant
+#   Speedster (mass 0.6): 8×2=16 impulse → 6.7u vs Speedster — glass cannon as intended
+#
+# Why warm-start from v37 not from scratch:
+#   Physics changes don't alter obs space (still 33 dims). The agent's learned
+#   strategies (aim, approach, targeting) transfer directly. Dynamics shift so we need
+#   re-adaptation, but warm-starting saves ~10M steps of re-learning fundamentals.
+#
+# Expected adaptation: episode length should rise from v37's ~53 steps toward the
+# v3 range (~100-150). Watch for agents learning edge pressure and follow-up pushes.
+#
+# Fast-fail check during first ~3 min:
+#   - Confirm "[RLAgentBrain] Player1 obs=33" in the standalone log (stale build = stop)
+#   - Confirm "Initializing from results/Pushman_Shared_v37/..." (warm-start works)
+#   - Confirm episode length begins rising after ~1-2M steps
+#   - Confirm Self-Play/ELO appears in TensorBoard (self-play still active)
+#
+# Launch:
+#   ./train.sh --standalone --config=ppo_shared_v38 --id=Pushman_Shared_v38 --force
+#
+# Export after run:
+#   results/Pushman_Shared_v38/Pushman/ → Assets/MLModels/Pushman_Shared/PushmanAgent_v38.onnx
+
+behaviors:
+
+  Pushman:
+    trainer_type: ppo
+
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 32768
+      learning_rate: 2.0e-4    # slightly higher than v37 (1e-4) — helps adapt to new dynamics faster
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 5
+
+    network_settings:
+      normalize: true
+      hidden_units: 256
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+    # Warm-start from v37's final checkpoint.
+    init_path: results/Pushman_Shared_v37/Pushman/Pushman-30000085.pt
+
+    # Self-play carried forward from v37.
+    self_play:
+      save_steps: 100_000
+      swap_steps: 20_000
+      window: 15
+      play_against_latest_model_ratio: 0.5
+      initial_elo: 1200.0
+
+    max_steps: 20_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5

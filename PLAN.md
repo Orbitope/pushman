@@ -1,13 +1,36 @@
 # Pushman — Master Plan
 
+> **Companion doc:** `DEV_NOTES.md` holds chronological decision rationales, phase
+> retrospectives, and abandoned approaches. PLAN.md is the forward-looking spec —
+> what the current target state is and what's left to build. When you want to know
+> *why* something is the way it is, check DEV_NOTES.
+
 ## 0. Implementation Status (source of truth — update this first)
-*Updated: 2026-05-22*
+*Updated: 2026-05-28*
 
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
 
-### RL Training: ✅ Phase 2 complete; Phase 3 (round-robin) ready to build
-`Pushman_Master_v1` trained 20M steps of Aggressive self-play under the rock-paper-scissors mechanics (block > push, dodge > block, push > dodge). ONNX integrated; CharacterStats rebalanced post-run (Heavyweight nerf, Speedster buff). Warm-start into Phase 3 verified end-to-end (2026-05-22). Next: build the round-robin scene + multi-behavior config.
+### RL Training: ✅ Phase 3.9 complete — best model to date
+`Pushman_Shared_v39` complete. 45M steps, pure round-robin (no self-play), drag=4, dodgeForce=14.
+ONNX at `Assets/MLModels/Pushman_Shared/PushmanAgent_v39.onnx`.
+
+**Key metrics (45M steps):**
+- Episode length: 115 steps final (v38 was 57, target was 100-150 ✅)
+- Entropy arc: 2.36 → 3.43 (healthy exploration burst after dropping self-play) → 2.25 (converged)
+- Cumulative reward: noisy near 0 (correct for symmetric game — one win = one loss)
+- No ELO scalar in TensorBoard (self-play confirmed off ✅)
+- Training dip at step 11M (73 steps) then solid recovery to 115-125 by step 33M+
+
+**Notable:** entropy peak at step 5.6M shows the model re-explored after losing self-play pressure —
+healthy sign. Final entropy 2.25 (vs v38 which didn't have this pattern).
+
+All showcase scenes (6, 7, 8) updated to use v39 ONNX.
+**Next:** evaluate in Unity (Pushman/6 → Play), then WebGL build + release prep.
+
+> ⚠️ Build hygiene: always verify `[RLAgentBrain] obs=33` in `results/<run>/run_logs/Player-0.log`
+> before walking away from a training launch. The grpc symlink also needs recreating after each
+> fresh server build: `ln -sf builds/Pushman_Training/PlugIns/libgrpc_csharp_ext.x64.bundle builds/Pushman_Training/Data/Managed/libgrpc_csharp_ext.x64.bundle`
 
 ---
 
@@ -23,15 +46,16 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
 - ✅ Training scene — 8×8 = 64 arenas, 25u spacing (ring radius 10u, players ring out before reaching neighbours)
 - ✅ BotPersonality SOs — `Aggressive`, `Defensive`, `Evasive`, `Balanced`, `Counter` (5 distinct RPS playstyles, retuned 2026-05-21)
 - ✅ CharacterStats SOs — `DefaultStats`, `Heavyweight`, `Speedster` (rebalanced 2026-05-22 after Phase 2 match-log analysis)
-- ✅ ObservationProfile SOs — `Profile_A` (full), `Profile_B` (FOV 90°), `Profile_C` (FOV + noise stubs)
-- ✅ `Assets/MLModels/` folder — target for trained ONNX files; naming: `[Personality]_[Stats]/PushmanAgent.onnx`
+- ✅ ObservationProfile SOs — `Profile_A` (full, used for v2 training), `Profile_C` (noise+delay stubs, used for v2.5). Profile_B (FOV) deleted.
+- ✅ `Assets/MLModels/` folder — `Pushman_Shared/PushmanAgent_v2.onnx` (30M steps, current best)
 
 **Editor tooling (`PushmanSetup.cs`)**
 - ✅ `Pushman/1b` — Human vs ChaseBotBrain test scene from scratch
 - ✅ `Pushman/4` — sprites + screen-space HUD (idempotent, safe to re-run)
 - ✅ `Pushman/2` — saves Arena + Player_RL prefabs
 - ✅ `Pushman/3` — builds ML_Training_Scene
-- ✅ `Pushman/5` — Bot vs Bot scene (both players InferenceOnly, auto-picks newest ONNX from Assets/MLModels/)
+- ✅ `Pushman/5` — Bot vs Bot scene (both players InferenceOnly, defaults to Pushman_Shared/PushmanAgent_v2.onnx)
+- ✅ `Pushman/6` — Personality Showcase Scene (5 arenas, shared ONNX, matchups reflect v2 win-rate matrix)
 
 **Visuals & HUD**
 - ✅ Screen-space stamina bars — P1 green bottom-left, P2 red bottom-right; `Image.Type.Filled` with sprite so `fillAmount` actually works
@@ -49,8 +73,6 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
 | regenBoostMultiplier | 2.5× (= 20/s boosted rate) |
 | blockDrain | 15/s |
 | dodgeStamina | 40 (tap costs 40%) |
-| allowDodgeOverdraft | true |
-| overdraftPauseDuration | 1.5s regen lockout |
 | dodgeForce | 12 (damping zeroed during dash; reduced from 18) |
 | pushStamina | 20–40 (scales with charge) |
 | pushChargeTime | 1s |
@@ -74,12 +96,7 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
 - ✅ `MatchLogger.cs` — logs every decided match (winner/loser personality + stats) to a
   timestamped CSV. Buffered writes + 15s timed flush = no hot-path I/O.
   Auto-bootstrapped by `ArenaManager` — no scene-builder wiring needed.
-- ⚠️ KNOWN ISSUE — `MatchLogger` writes to `Directory.GetCurrentDirectory()/match_logs/`.
-  For a standalone build that resolves to `builds/match_logs/`, NOT the project-root
-  `match_logs/` that `report.py` searches. Until fixed, pass the path explicitly. Fix
-  options: (a) `report.py` also globs `builds/match_logs/`, or (b) `MatchLogger` writes
-  to an absolute project path. Do (a) before Phase 3 — the win-rate matrix is the only
-  mid-run health signal once self-play ELO is gone.
+- ✅ `MatchLogger` path fix — `report.py` now globs both `match_logs/` and `builds/match_logs/`
 - ✅ `tools/report.py` — single on-demand report tool. Reads TensorBoard tfevents
   (training progress + health heuristic) and the newest match CSV (personality &
   CharacterStats win-rate matrices, balance/coverage check). Run from project root:
@@ -113,21 +130,358 @@ Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pu
 - ✅ `train.sh`, `.gitignore`, standalone build — all working (see Standalone Build Notes below)
 - ✅ First standalone run — `Pushman_Fast_v1` trained to 1M steps, ONNX exported & integrated
 - ✅ ONNX integration — `Pushman/5` Bot vs Bot watch scene auto-loads the newest model
-- ⚠️ **v1 bots play weakly** — root-caused to a reward-scaling bug, NOT under-training. Full diagnosis + 4-phase fix roadmap in **Section 4**.
-
 **Next up → Section 4 "Model Iteration & Polish Roadmap"** (branch `feature/model-iteration`)
 - ✅ Phase 1 — Task 1a ✅ reward retune; Task 1c ✅ trained (5M steps, 53m); Task 1d ✅ ONNX integrated
 - ✅ Phase 2 — `Pushman_Master_v1` complete (20M steps, Aggressive self-play, LSTM 128/2).
   ONNX → `Assets/MLModels/Aggressive_Default/PushmanAgent.onnx`. CharacterStats balance
   fixed post-run: Heavyweight nerfed (pushForce 14→9, chargeMultiplier 2→1.5),
   Speedster buffed (pushForce 5→7). Ready to warm-start Phase 3.
-- 🔄 Phase 3 — round-robin multi-personality training (see Section 4). Code + assets
-  ready: Task 3a ✅ dodge reward channels wired; Task 3b ✅ 5 RPS-differentiated
-  personalities (Aggressive, Defensive, Evasive, Balanced, Counter). Remaining, in
-  order: 3c ❌ pre-rebuild fixes (match_logs path + remove dodge overdraft) · 3d ❌
-  round-robin scene · 3e ❌ multi-behavior config + train · 3f ❌ evaluate.
+- ⚠️ Phase 3 v1 — `Pushman_RoundRobin_v1` (5M steps × 5 behaviors). Outcome unusable:
+  dodge-dominant collapse with no pushes, semi-random blocks. See `DEV_NOTES.md` →
+  "Phase 3 v1 retrospective" for diagnosis.
+- ✅ Phase 3 v2 — shared-network round-robin (one `Pushman` behavior, 5 personalities
+  via reward stream + self-personality observation). Trained clean (humanization=0) from
+  scratch, extended to 30M steps (initial 10M showed entropy too high at 78% of max).
+  Final: entropy 3.08 (66% of max), episode length 56, reward -0.29.
+  Win-rate matrix balanced: 48–51% overall range. All 5 personalities distinct.
+  Value loss peaked at 10.5 and nudged back — addressed in v2.5 via num_epoch: 5.
+  ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v2.onnx`.
+- 🔄 Phase 3.5 — humanization fine-tune. Warm-starts from v2; introduces noise + delay
+  with discrete humanization tiers {0, 0.33, 0.66, 1.0}. ~5M steps. Produces the
+  shipping ONNX deployable at any of the 4 difficulty tiers. num_epoch raised 3→5 to
+  address v2's value loss drift. **UNBLOCKED — ready to implement.**
+- ✅ Phase 3.9 v3 — expanded observation space. Adds 10 obs dims (23→33) to fix
+  push/block aim symptom. New obs: facing dot self→opp, opp facing dot, distance to opp,
+  ring-out margin, charge progress, opp state one-hot. Trained from scratch, 20M steps
+  (10M validation + 10M extension). Final entropy 3.011, episode length 144 (recent avg).
+  ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v3.onnx`.
+  **Awaiting showcase validation — open PersonalityShowcase and check push/block aim.**
+- ✅ Phase 3.7 — self-play hardening. Warm-starts from v3's 20M checkpoint.
+  Ran 30M steps with ML-Agents `self_play` block active (Pushman?team=0/1 confirmed in log).
+  Entropy 2.482 (converged), ELO dropped 1200→130 (likely ghost-pool artifact — ghosts trained on old
+  pushForce=12 env, current env is pushForce=9; metric unreliable across physics change boundary).
+  Episode length 53 steps (very short → fights ending on first push, hence v38).
+  ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v37.onnx`. Showcase: fights look good, just too fast.
+- ✅ Phase 3.8 — longer fights. drag 2→4, chargeMultiplier 1.5→1.0, Heavyweight rebalanced.
+  ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v38.onnx`. Self-play still caused ELO decline.
+- ✅ Phase 3.9 — drop self-play, fix dodge. 45M steps, episode length 115 steps final.
+  ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v39.onnx`.
+- ✅ Visual overhaul — ContentKit design system. Phases:
+  - ✅ Phase 1 — Sprites: 128px player circle + directional chevron (80% body / 100% chevron);
+    dark arena floor (Surface #1E1C16) + Amber Bright ring border (#E8C068). ContentKit
+    personality colors: Amber Bright/Steel Bright/Mauve Bright/Sage Bright/Terra Bright.
+    New sprites: `PlayerCircle.png`, `ArenaFloor.png`, `ArenaBorder.png`.
+    Camera background exact Void #111009. Hand sprite positions corrected (visible above body).
+  - ❌ Phase 2 — Lighting: `Pushman/10. Apply ContentKit Scene Setup` — camera Void bg,
+    key/fill lights, Global Volume post-processing.
+  - ✅ Phase 3 — TMP label migration: all world-space labels → TextMeshPro (Rajdhani titles,
+    Inter body); `MakeTMPWorldLabel` helper with `TMP_WORLD_CORRECTION = 7.84f` scale factor
+    (TMP 3D renders at fontSize × 0.127 world units — inverse applied via localScale so
+    fontSize maps directly to world-unit height). Label vertical spacing recalibrated.
+  - ❌ Phase 4 — HUD redesign: Surface panel backgrounds, Amber/Steel stamina bars,
+    score display with TMP (after Phase 2 done).
+- ✅ Showcase scenes — all 4 world-space showcase scenes complete and playable:
+  - `Pushman/6` PersonalityShowcase — 5 arenas, v39 ONNX, personality matchups
+  - `Pushman/7` CharacterShowcase — 3 arenas, Default/Heavyweight/Speedster
+  - `Pushman/8` DifficultyShowcase — 4 arenas, humanization tiers (Expert/Hard/Medium/Easy)
+  - `Pushman/9` LegacyShowcase — 3 arenas showing Baby AI (13 obs) / Dodge Dominant (18 obs) /
+    Phase 2 Trained (18 obs). Per-arena legacy observation profiles saved as `.asset` files
+    (`_Legacy/Legacy_Profile13.asset`, `_Legacy/Legacy_Profile18.asset`). ONNX models copied
+    into `Assets/MLModels/_Legacy/`. `VectorObservationSize` overridden per-arena after
+    `ConfigureBehaviorParameters` to avoid Profile_A (33-dim) clobbering legacy obs sizes.
 - 🔄 Phase 4 — visual & gameplay polish. Task 4e ✅ done (state readability: enlarged
   hand sprites + state tints). 4a-4d (audio, effects, arena/HUD, feel) pending.
+
+---
+
+### Section 5 — Phase 3 v2 / v2.5 spec & checklist
+
+Forward-looking spec only. For background on why these values were chosen, why we're
+not warm-starting from v1, why opponent personality is excluded, why two-phase, etc.,
+see `DEV_NOTES.md`.
+
+#### Mechanics (locked in 2026-05-23)
+
+`CharacterStats` SOs and `Player.cs` defaults:
+
+| Stat | Default | Heavyweight | Speedster |
+|---|---|---|---|
+| `pushChargeTime` | 0.25s | 0.3s | 0.2s |
+| `pushHitRadius` | 0.8u | — | — |
+| `dodgeForce` | 9 | 11 | 12 |
+| `pushForce` | 12 | 14 | 10 |
+
+Charging permits movement at 50% speed.
+
+#### Reward magnitudes (locked in 2026-05-23)
+
+`BotPersonality` SOs:
+
+| Signal | v2 value | Notes |
+|---|---|---|
+| `winRound` | 10.0 | Sparse, dominant |
+| `loseRound` | -10.0 | Symmetric |
+| `landPushHit` (base) | 0.03–0.05 | Tiny shaping signal |
+| `dodgeHitReward` (base) | 0.01–0.02 | Even tinier — dodge is evasion |
+| `edgeHitBonus` | 0.4–0.6 | Added on hits, scaled by opp `dist_from_center / current_ring_radius` |
+| `dodgeMissedPenalty` | -0.04 to -0.06 | Fires when dodge expires without contact |
+| `successfulBlock` | 0.04–0.2 | Personality-dependent |
+
+Per-episode budget check (busy 750-step match): dense total ≈ 2.5, win = 10.0 →
+terminal dominates by ~4×.
+
+#### Difficulty tiers (locked, used by Phase 3.5)
+
+| Player-facing | `humanization` | Noise σ (u) | Delay (frames @ 50Hz / ms) |
+|---|---|---|---|
+| Expert | 0.0 | 0 | 0 / 0 |
+| Hard | 0.33 | 0.05 | 4 / 80 |
+| Medium | 0.66 | 0.10 | 8 / 160 |
+| Easy | 1.0 | 0.15 | 12 / 240 |
+
+Convention: `humanization=0` = no degradation (Expert), `humanization=1` = max
+degradation (Easy). Player-facing labels are inverted from the scalar — use
+"humanization" in code, "difficulty" in UI.
+
+Phase 3.5 samples `humanization` uniformly from the discrete set
+`{0.0, 0.33, 0.66, 1.0}` per agent per episode. `humanization` is fed back to the
+network as a 1-dim observation so it can condition policy on its current tier.
+
+#### Architecture spec
+
+- One ML-Agents behavior: `BehaviorName = "Pushman"` on every agent in the round-robin scene
+- One shared network. 5 personalities differentiated by reward stream (per-agent
+  `BotPersonality` SO) + self-personality observation
+- No opponent-personality observation — agents read opponent state through behavior obs
+  (position, velocity, state, stamina, distance), which is universal across bot/human
+- Profile_A (perfect info) is the only profile used for v2 training
+- Profile_C (humanized) is added in v2.5; Profile_B is deleted entirely
+
+#### Config sketch (`ppo_shared_v2.yaml`)
+
+```yaml
+behaviors:
+  Pushman:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 2048      # bigger — more agents feeding one network
+      buffer_size: 32768
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: true        # turn on — reward scale now ±10
+      hidden_units: 256      # slightly bigger — more personalities to encode
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    # NO init_path — train from scratch
+    max_steps: 10_000_000
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5
+```
+
+For `ppo_shared_v25.yaml`: same as above but `init_path` points at the v2 checkpoint,
+`max_steps: 2_000_000`, `learning_rate: 1.0e-4`.
+
+#### Implementation checklist
+
+*Phase 3 v2 prep (build first):*
+
+Profile cleanup:
+- [ ] Delete `Assets/ScriptableObjects/Observation/Profile_B.asset`
+- [ ] Remove `useFOV`, `fieldOfViewAngle` fields from `ObservationProfile.cs`
+- [ ] Remove FOV-gating branch from `RLAgentBrain.CollectObservations`
+
+Shared-network architecture:
+- [ ] Add `selfPersonalityId` flag to `ObservationProfile.cs` (default true; one-hot 5 dims; NO opponent personality)
+- [ ] Give `BotPersonality.cs` a stable integer `id` (0–4) set on each asset, plus a
+      const `Count = 5`. Cleaner than a runtime name→id lookup.
+- [ ] Wire self-personality one-hot in `RLAgentBrain.CollectObservations`
+- [ ] Update `ObservationProfile.ComputeSpaceSize` to add 5 when `selfPersonalityId` is on
+- [ ] Set all round-robin arena `BehaviorName = "Pushman"` (currently five different names) in `PushmanSetup.WireRLPlayerForRR`
+
+Phase 3 v2 training:
+- [ ] Write `TrainingConfigs/ppo_shared_v2.yaml` — single `Pushman` behavior, train
+      from scratch, `network_settings.normalize: true`, `hidden_units: 256`,
+      `max_steps: 10_000_000`, no `init_path`
+- [x] Rebuild round-robin scene (`Pushman/3e`) — same 15 pairings × 3, just unified BehaviorName
+- [x] Train `Pushman_Shared_v2` — extended to 30M steps (10M entropy too high at 78% of max)
+- [x] Final metrics: entropy 3.08, episode length 56, reward -0.29, win-rate matrix 48–51%
+- [x] Export ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v2.onnx`
+- [x] Showcase scene (`Pushman/6`) updated to use shared ONNX; matchups reflect v2 win-rates
+- [x] Run `Pushman/6` — ring-out attempts confirmed, play quality acceptable. Personality
+      differences subtle visually (expected — divergence is statistical, not behavioral);
+      win-rate matrix asymmetries (up to 62%) are the real verification.
+- [ ] Verify human-vs-bot scene works at humanization=0 (clean obs only at this stage)
+
+*Phase 3.5 prep + training (after v2 validates):*
+
+Profile_C implementation:
+- [x] Implement noise: Box-Muller Gaussian applied to opponent position (σ = humanization × 0.15)
+      and velocity (σ × 0.5) when `profile.applyNoise` is true
+- [x] Implement delay: per-opponent ring buffer (size 16) written every FixedUpdate;
+      `CollectObservations` reads `delayFrames` steps back via modular index
+- [x] Add `humanization` bool flag to `ObservationProfile` (default false — Profile_C.asset
+      keeps it OFF to preserve 23-dim obs space and allow warm-start from v2)
+- [x] `humanization` scalar obs code is implemented behind `ObserveHumanization` flag but
+      not activated — can be turned on in a later fine-tune if per-tier policy conditioning
+      is needed. Noise/delay alone create real difficulty tiers without it.
+- [x] `OnEpisodeBegin` samples from `{0, 0.33, 0.66, 1.0}` when `runtimeHumanization < 0`;
+      computes `_noiseSigma = h × 0.15` and `_delayFrames = floor(h × 12)`
+- [x] Add `runtimeHumanization` inspector field (≥0 pins tier; <0 randomises — default -1)
+- [x] Obs space stays 23 — warm-start from v2 checkpoint works via `init_path`
+
+Phase 3.5 training:
+- [x] Write `TrainingConfigs/ppo_shared_v25.yaml`:
+      - `init_path: results/Pushman_Shared_v2/Pushman/Pushman-XXXXXX.pt`
+      - `max_steps: 5_000_000` (up from 2M — value loss needs more time to converge)
+      - `learning_rate: 1.0e-4` (lower than v2 to preserve learned strategies)
+      - `num_epoch: 5` (up from 3 — gives value function more gradient steps per batch
+        to catch up with policy; v2 value loss rose continuously 3→10 the entire run,
+        root cause is the value function chasing 5 simultaneous reward streams; more
+        epochs per batch lets it close the gap without increasing wall-clock time)
+- [ ] Rebuild round-robin scene (`Pushman/3e`) — now uses Profile_C (23 dims, same as v2); rebuild standalone
+- [ ] Train `Pushman_Shared_v25` (~3–4 h target at 8M warm-start steps)
+- [ ] Export ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v25.onnx`
+
+*Verification (after v2.5):*
+- [ ] Update showcase scene: 5 arenas, each pair runs the v2.5 ONNX with one of
+      {Expert, Hard, Medium, Easy} pinned per arena — visible humanization gradient
+- [ ] Verify human-vs-bot test scene at each of the 4 tiers; subjective feel check
+- [ ] Per-tier win-rate matrix: bot-vs-bot matches with both sides at the same tier;
+      should not collapse to one-sided wins at any tier (mirror matches ≈ 50/50)
+
+---
+
+#### Phase 3.9 v3 — Expanded observation space (NEW)
+
+Symptom observed during v2.5 evaluation: dodges hit reliably, but pushes and blocks
+fired in apparently random directions. Root cause confirmed in the game code:
+
+- **Dodge direction** = `player.Brain.GetMovement()` — comes from the agent's movement
+  input, which it sets to chase the opponent (since it has opponent's relative position).
+  Naturally aims correctly. ✓
+- **Push** requires `Vector2.Dot(transform.up, toOther) > 0.3f` (~70° facing cone) to
+  land. Agent has its own absolute rotation AND opponent's relative position, but no
+  pre-computed "am I aimed at the opponent" signal. It must derive the trig implicitly,
+  and after 30M+8M steps still hadn't. ✗
+- **Block** same issue — block direction = facing direction.
+
+The fix is a small set of pre-computed observations that reduce derivation load on
+the network and surface strategically important signals directly.
+
+**Observation additions (10 dims total, 23 → 33):**
+
+| Obs | Dims | Rationale |
+|---|---|---|
+| `selfChargeProgress` | +1 | `currentChargeTime / pushChargeTime`; 0 when not charging. Enables push-release timing. |
+| `selfRingOutMargin` | +1 | `1 - distFromCenter / currentRingRadius`. Pre-computed safety scalar. |
+| `selfFacingOpponentDot` | +1/opp | `Dot(self.up, dirToOpp)`. Directly answers "am I aimed at opp." Fixes the symptom above. |
+| `distanceToOpponent` | +1/opp | `|relPos| / ringOutRadius`. Saves the net from learning sqrt. |
+| `opponentFacingSelfDot` | +1/opp | `Dot(opp.up, -dirToOpp)`. Predicts incoming pushes/blocks. |
+| `opponentStateOneHot` | +5/opp | Replaces 1-dim float with 6-dim one-hot. Cleaner categorical encoding. |
+
+**Total v3 obs space (Profile_A, 1v1):**
+```
+self:    kin(3) + stam(1) + state(1) + chargeProg(1) + stats(5) + personality(5) = 16
+arena:   bounds(3) + ringOutMargin(1) = 4
+per-opp: pos(2) + vel(2) + state-onehot(6) + facingSelfToOpp(1) + dist(1) + facingOppToSelf(1) = 13
+TOTAL:   33
+```
+
+**Trade-offs:**
+- Cannot warm-start from v2/v2.5 (obs space changed — input layer mismatch)
+- +10 obs dims → +2560 first-layer weights (network has ~65k in that layer; trivial cost)
+- Should converge in ~v2's 30M budget; might be faster because of the pre-computed features
+
+**Strategy: validation-first.** v3 runs for **10M steps only** to confirm the obs
+expansion fixes the aim symptom. If validation passes, Phase 3.7 warm-starts from
+the v3 checkpoint and trains for another 20M steps with self-play enabled (combined
+30M total budget). This keeps the v3 hypothesis cleanly testable while not wasting
+the from-scratch training on a pure obs experiment.
+
+**Config: `ppo_shared_v3.yaml`:**
+- `max_steps: 10_000_000` (validation run)
+- `num_epoch: 5` (carried over from v2.5 — value-function helper)
+- `learning_rate: 3.0e-4` (v2 initial; we're starting fresh)
+- No `init_path`
+
+**Validation criteria (at 10M steps before launching Phase 3.7):**
+1. Push and block aim look intentional (not random) in `Pushman/6` showcase
+2. Entropy ≤ 3.5 (v2 was at 3.68 at 10M)
+3. Episode length stable, not creeping above 200 (would indicate facing-reward dominance)
+
+**Implementation checklist:**
+- [x] Add 6 new obs flags to `ObservationProfile.cs`
+- [x] Update `ObservationProfile.ComputeSpaceSize`
+- [x] Add property accessors + emission logic to `RLAgentBrain.cs`
+- [x] Enable new flags on Profile_A.asset and Profile_C.asset
+- [x] Update `PushmanSetup.OBS_SIZE` to 33
+- [x] Write `TrainingConfigs/ppo_shared_v3.yaml` (10M validation)
+- [x] Write `TrainingConfigs/ppo_shared_v37.yaml` (20M self-play warm-start)
+- [ ] Rebuild round-robin scene (`Pushman/3e`) — picks up new obs size automatically via Profile.ComputeSpaceSize
+- [ ] Rebuild standalone, apply post-build patches (xattr + gRPC symlink)
+- [ ] Train `Pushman_Shared_v3` (~3-4 h target at 10M steps)
+- [ ] Validate aim in showcase before continuing
+- [ ] Wire Team IDs in `PushmanSetup.WireRLPlayerForRR` (`bp.TeamId = playerIndex % 2`)
+- [ ] Rebuild round-robin scene + standalone again for Phase 3.7
+- [ ] Train `Pushman_Shared_v37` warm-starting from v3 (~6-8 h at 20M steps)
+- [ ] Export ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v37.onnx`
+- [ ] Update showcase scenes to use v3.7 ONNX (the final shipping model)
+
+---
+
+#### Phase 3.7 — Self-play hardening (after v3 validates)
+
+Goal: make the agent robust against strategies it hasn't seen during the current training
+run. ML-Agents' `self_play` block maintains a pool of past policy snapshots and
+periodically swaps the round-robin opponents to older versions, so the policy must beat
+not just its current self but prior iterations too. This prevents forgetting and improves
+resistance to novel human play.
+
+**Prerequisite code change — Team IDs:**
+ML-Agents `self_play` requires each agent to have a `Team ID` set on its
+`BehaviorParameters` (0 or 1). Currently all agents use the default (team 0). The
+round-robin scene needs one player per arena set to team 0 and the other to team 1.
+- [ ] In `PushmanSetup.WireRLPlayerForRR`, set `bp.TeamId = playerIndex % 2` (0 or 1)
+- [ ] Rebuild round-robin scene (`Pushman/3e`) after the change
+
+**Config — `ppo_shared_v37.yaml` (written, see file):**
+- `init_path: results/Pushman_Shared_v3/Pushman/Pushman-10000000.pt` (warm-start from v3)
+- `max_steps: 20_000_000` (combined with v3's 10M = 30M total budget, matches v2)
+- `learning_rate: 1.0e-4` (preserve v3 strategies while adding robustness)
+- `num_epoch: 5` (carried from v3)
+- `self_play`: save_steps=100k, swap_steps=20k, window=15, play_against_latest_ratio=0.5
+
+**Throughput note:** with self-play active, only the team-0 side learns each step
+(team-1 is the frozen ghost). Effectively halves gradient updates per arena compared
+to the v3 round-robin where both players trained. The 20M steps here ≈ 10M
+v3-equivalent gradient updates. Accept this cost for the robustness benefit.
+
+**Checklist:**
+- [ ] Validate v3 aim improvements pass (see Phase 3.9 validation criteria above)
+- [ ] Set `TeamId` on player agents in `PushmanSetup.WireRLPlayerForRR` (`playerIndex % 2`)
+- [ ] Rebuild round-robin scene
+- [x] Write `TrainingConfigs/ppo_shared_v37.yaml` with `self_play` block and `init_path`
+      pointing at the v3 10M checkpoint
+- [ ] Rebuild standalone, apply post-build patches
+- [ ] Train `Pushman_Shared_v37` (~6-8h target at 20M steps with self-play active)
+- [ ] Export ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v37.onnx`
+- [ ] Verify ELO curve in TensorBoard (`Self-Play/ELO`) rises and stabilizes — a flat or
+      falling ELO means the ghost pool is too strong or the LR is too low
+- [ ] Human-vs-bot feel check vs v3 baseline — should be more strategically robust
+
+---
 
 **Standalone Build Notes (apply after every rebuild)**
 Two patches are required after building — they survive until the next rebuild:
@@ -438,14 +792,14 @@ Two unrelated changes that both must land before the standalone is rebuilt for P
 `builds/match_logs/`, not the project-root `match_logs/` that `report.py` searches. The
 win-rate matrix is the ONLY mid-run health signal once self-play ELO is gone, so this
 must work before Phase 3 launches.
-- [ ] In `tools/report.py`, function `newest_match_log()` — glob both locations:
+- [x] In `tools/report.py`, function `newest_match_log()` — glob both locations:
   ```python
   files = sorted(
       glob.glob("match_logs/*.csv") + glob.glob("builds/match_logs/*.csv"),
       key=os.path.getmtime)
   ```
   (`glob` and `os` are already imported.)
-- [ ] Acceptance: `python tools/report.py --matches-only` finds the newest CSV with no
+- [x] Acceptance: `python tools/report.py --matches-only` finds the newest CSV with no
   hand-passed path. Phase 2's logs are in `builds/match_logs/` — test against those.
 
 **3c.2 — Remove the dodge overdraft mechanic.** WHY: `Player.TryDodgeWithOverdraft`
@@ -463,61 +817,36 @@ away from the overdraft-reliant local optimum during the run. Doing it now folds
 adaptation into a run that happens anyway; doing it after Phase 3 needs a separate
 adaptation run. Expect Phase 3 to converge a little slower since the warm-start begins
 maladapted (un-learning overdraft on top of learning the 5-way differentiation).
-- [ ] Set `allowDodgeOverdraft: false` on all `CharacterStats` assets (DefaultStats has
-  it `true`; confirm Heavyweight/Speedster against the `CharacterStats.cs` default).
-- [ ] Optionally delete the now-dead overdraft branch in `Player.TryDodgeWithOverdraft`
-  and the unused `overdraftPauseDuration` field for cleanliness.
-- [ ] With overdraft off a dodge hard-requires `dodgeStamina` (Default 40, Heavyweight
-  50, Speedster 25); stamina floors at 0 (no negative-stamina drift). Verify each
-  character can still dodge at a reasonable cadence.
+- [x] Removed `allowDodgeOverdraft` and `overdraftPauseDuration` fields from
+  `CharacterStats.cs` entirely. Removed from `DefaultStats.asset`. Heavyweight/Speedster
+  never had the fields serialized — no changes needed.
+- [x] Replaced `TryDodgeWithOverdraft` with `TryDodge` (simple `CanUseStamina` check).
+  Removed `_regenPausedUntil`/`RegenPaused` from `Player.cs`. Cleaned regen logic
+  (removed `!RegenPaused` gate). Updated `PlayerDodgingState.cs` and `StaminaHUD.cs`.
+- [x] Dodge hard-requires `dodgeStamina`; stamina floors at 0.
 
-**Task 3d — Round-robin training scene (`Pushman/3e`).**
-- [ ] Add `Pushman/3e. Build Round-Robin Training Scene` to `PushmanSetup.cs`; use
-  `BuildTrainingScene()` as the template.
-- [ ] DECISION (2026-05-22): include mirrors. 15 pairings total — the 10 cross
-  pairings C(5,2) PLUS the 5 mirrors (Aggressive vs Aggressive, etc.). Mirrors close
-  the gap where two same-personality bots meet at deployment and let each personality
-  learn its own counter.
-- [ ] Grid: 45 arenas (9×5) — 15 pairings × 3 arenas each, exact and even.
-  Distribute via `pairing = arenaIndex % 15`.
-- [ ] Per arena, Player1 and Player2 take the pairing's two personalities. For each:
-  set `RLAgentBrain.personality` to the matching `BotPersonality` SO, and set
-  `BehaviorParameters.BehaviorName` to that personality's name (e.g. `Aggressive`).
-  Both stay `BehaviorType.Default` — both train.
-- [ ] REQUIRED — keep `ObservationProfile` = `Profile_A` with 1 opponent so obs space
-  stays 18. The Master checkpoint's input layer is 128×18; any other size breaks
-  warm-start.
-- [ ] Populate every `ArenaManager.statsPool` with `DefaultStats`, `Heavyweight`,
-  `Speedster` so stats randomise per episode.
-- [ ] Save to `Assets/Scenes/ML_Training_RoundRobin.unity`. In Build Settings make it
-  the ONLY enabled scene — if the old training scene stays enabled and ordered first,
-  the build silently trains the wrong scene for hours.
-- [ ] Acceptance (verify ALL before the multi-hour run): 45 arenas built, all 15
-  pairings represented 3× each; every `RLAgentBrain.personality` is non-null; every
-  `BehaviorParameters.BehaviorName` exactly matches a `behaviors:` key in
-  `ppo_roundrobin.yaml`; all 5 personalities present; obs space logged as 18.
+**Task 3d — Round-robin training scene (`Pushman/3e`).** ✅ DONE 2026-05-22
+- [x] `Pushman/3e. Build Round-Robin Training Scene` added to `PushmanSetup.cs`.
+- [x] 45 arenas (9×5), 15 pairings × 3. 5 mirrors + 10 cross. `pairing = arenaIndex % 15`.
+- [x] Each personality appears exactly 18 times (9 arenas × 2 players). Verified via
+  scene YAML parse: 90 total behavior entries, 18 per personality.
+- [x] `BehaviorParameters.BehaviorName` = personality name ("Aggressive", etc.).
+  Both players `BehaviorType.Default` — both train.
+- [x] `ObservationProfile` = Profile_A, obs space 18. All `statsPool` = 3 variants.
+- [x] Saved → `Assets/Scenes/ML_Training_RoundRobin.unity`.
+  Build Settings: round-robin is enabled first; all other training scenes disabled.
 
 **Task 3e — Multi-behavior config + train.**
-- [ ] New `TrainingConfigs/ppo_roundrobin.yaml` — 5 `behaviors:` blocks, one per
-  personality name. Each block MUST match the Master checkpoint exactly: `normalize:
-  false`, `hidden_units: 128`, `num_layers: 2`, `memory: {sequence_length: 64,
-  memory_size: 128}`, `reward_signals.extrinsic: {gamma: 0.99, strength: 1.0}`.
-  Give each a per-behavior:
-  ```
-  init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
-  ```
-  to warm-start every personality from the Phase 2 master. (Path + cross-trainer
-  compatibility VERIFIED 2026-05-22 — a 50k-step `ppo_warmstart_test.yaml` run loaded
-  this exact checkpoint into a non-self-play PPO trainer clean; reward started at +0.1,
-  not the -0.7 of a from-scratch run.) No `self_play:` block — opponents are the other
-  live behaviors, not frozen snapshots.
+- [x] `TrainingConfigs/ppo_roundrobin.yaml` written — 5 behaviors, all matching Master
+  checkpoint architecture (128/2/mem128). All `init_path` verified to exist.
+  YAML parses cleanly; all 5 checkpoint paths confirmed present.
 - [ ] FAST-FAIL CHECK: within the first ~2 min of the run, confirm the log prints
   `Initializing from results/Pushman_Master_v1/...` for every behavior and shows NO
-  `Failed to load` warnings. Abort immediately on any failure — do not discover it
-  hours in (the Phase 2b lesson).
-- [ ] Rebuild standalone. Run:
-  `./train.sh --standalone --config=ppo_roundrobin --id=Pushman_RoundRobin_v1 --force`
-  All 5 networks train at once. ~4-6 h; ~3-5M steps per behavior.
+  `Failed to load` warnings. Abort immediately on any failure.
+- [ ] Rebuild standalone (ML_Training_RoundRobin is now the only enabled scene;
+  overdraft code removed — both require a rebuild). Apply post-build patches.
+- [ ] Run: `./train.sh --standalone --config=ppo_roundrobin --id=Pushman_RoundRobin_v1 --force`
+  All 5 networks train at once. ~4-6 h; ~5M steps per behavior.
 - [ ] Export each behavior's ONNX →
   `Assets/MLModels/[Personality]_Default/PushmanAgent.onnx`.
 
