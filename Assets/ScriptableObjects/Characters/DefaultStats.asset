@@ -19,10 +19,10 @@ MonoBehaviour:
   blockStaminaUsageRate: 15
   regenBoostThreshold: 0.75
   regenBoostMultiplier: 2.5
-  dodgeForce: 14
-  dodgeStamina: 25
+  dodgeForce: 9
+  dodgeStamina: 40
   dodgeTime: 0.25
-  pushForce: 9
+  pushForce: 12
   pushStamina: 20
-  pushChargeMultiplier: 1
+  pushChargeMultiplier: 1.5
   pushChargeTime: 0.25

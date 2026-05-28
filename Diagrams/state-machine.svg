@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="580" viewBox="0 0 980 580">
+  <defs>
+    <!-- Arrowhead markers, one per accent colour + muted for returns -->
+    <marker id="arr-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#E8C068"/>
+    </marker>
+    <marker id="arr-sage" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#9ABB86"/>
+    </marker>
+    <marker id="arr-mauve" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#B898CC"/>
+    </marker>
+    <marker id="arr-terra" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#DC9878"/>
+    </marker>
+    <marker id="arr-muted" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#6A6358"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="980" height="580" fill="#111009"/>
+
+  <!-- Title -->
+  <text x="490" y="40" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="22" font-weight="bold" fill="#E8E4D8" letter-spacing="4">PLAYER STATE MACHINE</text>
+
+  <!-- Legend -->
+  <line x1="220" y1="60" x2="260" y2="60" stroke="#9AAABB" stroke-width="2.5"/>
+  <polygon points="258,57 266,60 258,63" fill="#9AAABB"/>
+  <text x="272" y="64" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#6A6358">action transition</text>
+  <line x1="390" y1="60" x2="430" y2="60" stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4"/>
+  <polygon points="428,57 436,60 428,63" fill="#6A6358"/>
+  <text x="442" y="64" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#6A6358">return to idle</text>
+
+  <!-- ════════════════════════════════════════
+       ARROWS  (drawn before nodes so they don't overdraw labels)
+       ════════════════════════════════════════ -->
+
+  <!-- 1. Moving → Charging  (Amber — entering Charging state) -->
+  <line x1="408" y1="279" x2="562" y2="164"
+        stroke="#E8C068" stroke-width="2.5"
+        marker-end="url(#arr-amber)"/>
+  <text x="506" y="210" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#E8C068" opacity="0.85">hold push</text>
+
+  <!-- 2. Moving → Blocking  (Sage — entering Blocking state) -->
+  <line x1="408" y1="301" x2="562" y2="416"
+        stroke="#9ABB86" stroke-width="2.5"
+        marker-end="url(#arr-sage)"/>
+  <text x="506" y="374" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#9ABB86" opacity="0.85">hold block</text>
+
+  <!-- 3. Moving → Dodging  (Mauve — entering Dodging state) -->
+  <!-- Offset: y=282 (above centre) for outgoing -->
+  <line x1="258" y1="282" x2="178" y2="282"
+        stroke="#B898CC" stroke-width="2.5"
+        marker-end="url(#arr-mauve)"/>
+  <text x="218" y="271" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#B898CC" opacity="0.85">dodge</text>
+  <text x="218" y="283" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">(uses stamina)</text>
+
+  <!-- 4. Charging → Pushing  (Terra — entering Pushing state) -->
+  <line x1="658" y1="144" x2="748" y2="272"
+        stroke="#DC9878" stroke-width="2.5"
+        marker-end="url(#arr-terra)"/>
+  <text x="720" y="198" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#DC9878" opacity="0.85">release</text>
+
+  <!-- 5. Pushing → Stunned  (muted — recovery frames, forced) -->
+  <line x1="812" y1="318" x2="408" y2="472"
+        stroke="#6A6358" stroke-width="2.5"
+        marker-end="url(#arr-muted)"/>
+  <text x="648" y="406" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" opacity="0.85">0.2s recovery</text>
+
+  <!-- 6. Dodging → Moving  (muted dashed — return, offset y=298 below centre) -->
+  <line x1="178" y1="298" x2="258" y2="298"
+        stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4"
+        marker-end="url(#arr-muted)"/>
+  <text x="218" y="314" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" opacity="0.75">on land / hit</text>
+
+  <!-- 7. Blocking → Moving  (muted dashed — curved to separate from Moving→Blocking) -->
+  <path d="M 562,416 Q 448,346 408,302"
+        stroke="#6A6358" stroke-width="2" fill="none" stroke-dasharray="5,4"
+        marker-end="url(#arr-muted)"/>
+  <text x="462" y="347" text-anchor="end"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" opacity="0.75">release</text>
+
+  <!-- 8. Stunned → Moving  (muted dashed — straight up) -->
+  <line x1="333" y1="456" x2="333" y2="318"
+        stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4"
+        marker-end="url(#arr-muted)"/>
+  <text x="350" y="390" text-anchor="start"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" opacity="0.75">after duration</text>
+
+  <!-- ════════════════════════════════════════
+       NODES
+       All: rounded-rect 150×50 rx=25, Surface fill, coloured stroke + label
+       cx±75 = left/right edge; cy±25 = top/bottom edge
+       ════════════════════════════════════════ -->
+
+  <!-- DODGING  cx=103 cy=290  — Mauve -->
+  <rect x="28" y="265" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#B898CC" stroke-width="2.5"/>
+  <text x="103" y="286" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#B898CC" letter-spacing="2">DODGING</text>
+  <text x="103" y="303" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">dashing</text>
+
+  <!-- MOVING  cx=333 cy=290  — Steel -->
+  <rect x="258" y="265" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#9AAABB" stroke-width="2.5"/>
+  <text x="333" y="286" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#9AAABB" letter-spacing="2">MOVING</text>
+  <text x="333" y="303" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">default / idle</text>
+
+  <!-- CHARGING  cx=583 cy=140  — Amber -->
+  <rect x="508" y="115" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#E8C068" stroke-width="2.5"/>
+  <text x="583" y="136" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#E8C068" letter-spacing="2">CHARGING</text>
+  <text x="583" y="153" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">building push force</text>
+
+  <!-- PUSHING  cx=833 cy=290  — Terra -->
+  <rect x="758" y="265" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#DC9878" stroke-width="2.5"/>
+  <text x="833" y="286" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#DC9878" letter-spacing="2">PUSHING</text>
+  <text x="833" y="303" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">push executing</text>
+
+  <!-- BLOCKING  cx=583 cy=440  — Sage -->
+  <rect x="508" y="415" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#9ABB86" stroke-width="2.5"/>
+  <text x="583" y="436" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#9ABB86" letter-spacing="2">BLOCKING</text>
+  <text x="583" y="453" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">shielding</text>
+
+  <!-- STUNNED  cx=333 cy=480  — muted -->
+  <rect x="258" y="455" width="150" height="50" rx="25"
+        fill="#1A1810" stroke="#6A6358" stroke-width="2"/>
+  <text x="333" y="476" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="bold" fill="#6A6358" letter-spacing="2">STUNNED</text>
+  <text x="333" y="493" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#4A4840">temporary stagger</text>
+
+  <!-- Footer note -->
+  <text x="490" y="560" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#4A4840">* taking a hit from any state immediately transitions to Stunned</text>
+</svg>

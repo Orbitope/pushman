@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
@@ -327,8 +328,9 @@ public static class PushmanSetup
         }
 
         // Wide orthographic camera — all 5 arenas (x=0..100) plus labels above.
-        // At 16:9: width = orthoSize*2*(16/9). Need width ≥ 124u (arenas + padding).
-        // orthoSize = 124/(2*16/9) ≈ 34.9 → use 38 to add breathing room for labels.
+        // 5 arenas: half-width = (4×25)/2 + 10 + 5 padding = 65u
+        // At 16:9: orthoSize = 65 / 1.778 = 36.6 → use 35.
+        // Camera Y centered on content: ring bottom=-10, label top≈yTop+2.8=16.3 → center≈3.15
         float centerX = (matchups.Length - 1) * ARENA_SPACING * 0.5f;
         var cam = Camera.main;
         if (cam == null)
@@ -339,8 +341,8 @@ public static class PushmanSetup
             camGO.AddComponent<AudioListener>();
         }
         cam.orthographic       = true;
-        cam.orthographicSize   = 38f;
-        cam.transform.position = new Vector3(centerX, 1f, -10f);  // shift up 1u to balance labels
+        cam.orthographicSize   = 35f;
+        cam.transform.position = new Vector3(centerX, 3.15f, -10f);
         cam.clearFlags         = CameraClearFlags.SolidColor;
         cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);  // ContentKit Void — warm near-black
         EditorUtility.SetDirty(cam.gameObject);
@@ -505,7 +507,9 @@ public static class PushmanSetup
             Debug.Log($"[DiffShowcase] Arena {i}: {label} (humanization={hum})");
         }
 
-        // Wide ortho camera — 4 arenas at x=0..75 + label padding.
+        // 4 arenas: half-width = (3×25)/2 + 10 + 5 padding = 52.5u
+        // At 16:9: orthoSize = 52.5 / 1.778 = 29.5 → use 28.
+        // Camera Y centered on content: ring bottom=-10, label top≈16.3 → center≈3.15
         float centerX = (tiers.Length - 1) * ARENA_SPACING * 0.5f;
         var cam = Camera.main;
         if (cam == null)
@@ -516,8 +520,8 @@ public static class PushmanSetup
             camGO.AddComponent<AudioListener>();
         }
         cam.orthographic       = true;
-        cam.orthographicSize   = 32f;
-        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        cam.orthographicSize   = 28f;
+        cam.transform.position = new Vector3(centerX, 3.15f, -10f);
         cam.clearFlags         = CameraClearFlags.SolidColor;
         cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
         EditorUtility.SetDirty(cam.gameObject);
@@ -580,19 +584,19 @@ public static class PushmanSetup
         var profileA = AssetDatabase.LoadAssetAtPath<ObservationProfile>(
             "Assets/ScriptableObjects/Observation/Profile_A.asset");
 
-        // Color per archetype — consistent across arenas so viewer can track characters.
-        var colorDefault   = new Color(0.35f, 0.65f, 1.00f);   // blue
-        var colorHeavy     = new Color(0.80f, 0.25f, 0.25f);   // red
-        var colorSpeedster = new Color(0.25f, 0.85f, 0.40f);   // green
+        // Color per archetype — ContentKit Bright palette, consistent across arenas.
+        var colorDefault   = new Color(0.604f, 0.667f, 0.733f);  // Steel Bright  #9AAABB — neutral, versatile
+        var colorHeavy     = new Color(0.863f, 0.596f, 0.471f);  // Terra Bright  #DC9878 — warm, heavy
+        var colorSpeedster = new Color(0.604f, 0.733f, 0.525f);  // Sage Bright   #9ABB86 — light, fast
 
+        // 3 cross-matchups only — mirrors (Heavy vs Heavy, Speedster vs Speedster) dropped.
+        // Fewer arenas → smaller camera → arenas fill the screen.
         var matchups = new (CharacterStats a, string nameA, Color colA,
                             CharacterStats b, string nameB, Color colB)[]
         {
             (statsDefault,   "Default",    colorDefault,   statsHeavy,     "Heavyweight", colorHeavy),
             (statsDefault,   "Default",    colorDefault,   statsSpeedster, "Speedster",   colorSpeedster),
             (statsHeavy,     "Heavyweight",colorHeavy,     statsSpeedster, "Speedster",   colorSpeedster),
-            (statsHeavy,     "Heavyweight",colorHeavy,     statsHeavy,     "Heavyweight", colorHeavy),
-            (statsSpeedster, "Speedster",  colorSpeedster, statsSpeedster, "Speedster",   colorSpeedster),
         };
 
         EnsureFolders();
@@ -669,10 +673,8 @@ public static class PushmanSetup
             SetHandScale(p2GO, "PushHand",  new Vector3(2.8f, 2.8f, 1f));
             SetHandScale(p2GO, "BlockHand", new Vector3(2.2f, 2.6f, 1f));
 
-            // Label shows character names + a one-line stat summary.
-            string statsLineA = $"spd {statsA.movementSpeed}  push {statsA.pushForce}  mass {statsA.weight}";
-            string statsLineB = $"spd {statsB.movementSpeed}  push {statsB.pushForce}  mass {statsB.weight}";
-            AddCharacterLabel(arenaGO, nameA, colA, statsLineA, nameB, colB, statsLineB, yTop: 13.5f);
+            // Label: names only. yTop=16 keeps bottom name 3.5u clear of the ring edge (y=10).
+            AddCharacterLabel(arenaGO, nameA, colA, null, nameB, colB, null, yTop: 16.0f);
 
             EditorUtility.SetDirty(am);
             EditorUtility.SetDirty(p1GO);
@@ -680,6 +682,9 @@ public static class PushmanSetup
             Debug.Log($"[CharShowcase] Arena {i}: {nameA} vs {nameB}");
         }
 
+        // 3 arenas: half-width needed = (2×25)/2 + 10 + 5 padding = 40u
+        // At 16:9 aspect: orthoSize = 40 / 1.778 = 22.5 → use 22.
+        // Camera Y centered on content: ring bottom=-10, label top=yTop+2.5=18.5 → center=4.25
         float centerX = (matchups.Length - 1) * ARENA_SPACING * 0.5f;
         var cam = Camera.main;
         if (cam == null)
@@ -690,8 +695,8 @@ public static class PushmanSetup
             camGO.AddComponent<AudioListener>();
         }
         cam.orthographic       = true;
-        cam.orthographicSize   = 38f;
-        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        cam.orthographicSize   = 22f;
+        cam.transform.position = new Vector3(centerX, 4.25f, -10f);
         cam.clearFlags         = CameraClearFlags.SolidColor;
         cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
         EditorUtility.SetDirty(cam.gameObject);
@@ -706,7 +711,7 @@ public static class PushmanSetup
         AssetDatabase.Refresh();
         Debug.Log($"[CharShowcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
                   "  All arenas: Aggressive vs Aggressive, same ONNX — only CharacterStats differ.\n" +
-                  "  Blue = Default  |  Red = Heavyweight  |  Green = Speedster\n" +
+                  "  Steel = Default  |  Terra = Heavyweight  |  Sage = Speedster\n" +
                   "  Arena 0 — Default vs Heavyweight  (avg vs tank)\n" +
                   "  Arena 1 — Default vs Speedster    (avg vs glass cannon)\n" +
                   "  Arena 2 — Heavyweight vs Speedster (extreme contrast)\n" +
@@ -720,14 +725,11 @@ public static class PushmanSetup
                                           string nameB, Color colB, string statsB,
                                           float yTop)
     {
-        var muted = new Color(0.604f, 0.580f, 0.518f);  // Text Secondary #9A9484
-        var dim   = new Color(0.416f, 0.388f, 0.345f);  // Text Muted     #6A6358
-        // 5-label stack: names=2.2u, stats/VS=1.0u. Spaced to avoid overlap.
-        MakeTMPWorldLabel(arenaGO, $"Label_{nameA}",  nameA.ToUpper(),  FontTitle, 2.2f, colA,  new Vector3(0f, yTop + 4.0f, 0f));
-        MakeTMPWorldLabel(arenaGO,  "Label_statsA",   statsA,           FontBody,  1.0f, muted, new Vector3(0f, yTop + 2.2f, 0f));
-        MakeTMPWorldLabel(arenaGO,  "Label_vs",       "VS",             FontBody,  1.0f, dim,   new Vector3(0f, yTop + 0.9f, 0f));
-        MakeTMPWorldLabel(arenaGO, $"Label_{nameB}",  nameB.ToUpper(),  FontTitle, 2.2f, colB,  new Vector3(0f, yTop - 0.8f, 0f));
-        MakeTMPWorldLabel(arenaGO,  "Label_statsB",   statsB,           FontBody,  1.0f, muted, new Vector3(0f, yTop - 2.8f, 0f));
+        var dim = new Color(0.416f, 0.388f, 0.345f);  // Text Muted #6A6358
+        // 3-line stack: nameA (large) / vs (small muted) / nameB (large). Stats dropped for clarity.
+        MakeTMPWorldLabel(arenaGO, $"Label_{nameA}", nameA.ToUpper(), FontTitle, 3.5f, colA, new Vector3(0f, yTop + 2.5f, 0f));
+        MakeTMPWorldLabel(arenaGO,  "Label_vs",      "vs",            FontBody,  1.4f, dim,  new Vector3(0f, yTop + 0.0f, 0f));
+        MakeTMPWorldLabel(arenaGO, $"Label_{nameB}", nameB.ToUpper(), FontTitle, 3.5f, colB, new Vector3(0f, yTop - 2.5f, 0f));
     }
 
     // -----------------------------------------------------------------------
@@ -888,12 +890,12 @@ public static class PushmanSetup
         CleanupObject("Arena");
         CleanupObject("StaminaHUD");
 
-        // Era colors: red=bad, orange=middling, yellow-green=almost-there
+        // Era colors — ContentKit Bright palette, progression from rough → unstable → refined.
         var eraColors = new Color[]
         {
-            new Color(0.90f, 0.25f, 0.25f),   // Arena 0 — red    (baby AI)
-            new Color(0.95f, 0.55f, 0.10f),   // Arena 1 — orange (dodge dominant)
-            new Color(0.70f, 0.90f, 0.20f),   // Arena 2 — lime   (phase 2)
+            new Color(0.863f, 0.596f, 0.471f),  // Arena 0 — Terra Bright  #DC9878 (Baby AI — rough/warm)
+            new Color(0.722f, 0.596f, 0.800f),  // Arena 1 — Mauve Bright  #B898CC (Dodge Dominant — strange/unstable)
+            new Color(0.604f, 0.667f, 0.733f),  // Arena 2 — Steel Bright  #9AAABB (Phase 2 — cooler, more refined)
         };
 
         for (int i = 0; i < arenaModels.Length; i++)
@@ -991,8 +993,11 @@ public static class PushmanSetup
             camGO.AddComponent<AudioListener>();
         }
         cam.orthographic       = true;
-        cam.orthographicSize   = 28f;   // 3 arenas, tighter than 5-arena showcases
-        cam.transform.position = new Vector3(centerX, 1f, -10f);
+        // 3 arenas: half-width = (2×25)/2 + 10 + 5 padding = 40u
+        // At 16:9: orthoSize = 40 / 1.778 = 22.5 → use 22.
+        // Camera Y centered on content: ring bottom=-10, label top≈15.5 → center≈2.75
+        cam.orthographicSize   = 22f;
+        cam.transform.position = new Vector3(centerX, 2.75f, -10f);
         cam.clearFlags         = CameraClearFlags.SolidColor;
         cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);
         EditorUtility.SetDirty(cam.gameObject);
@@ -1007,9 +1012,9 @@ public static class PushmanSetup
         // profiles are on-disk assets — do not DestroyImmediate
         AssetDatabase.Refresh();
         Debug.Log($"[LegacyShowcase] Saved → {SHOWCASE_SCENE_PATH}. Open it and press Play.\n" +
-                  "  Arena 0 (red)    — Baby AI: Fast_v1 at 500k steps\n" +
-                  "  Arena 1 (orange) — Dodge Dominant: RoundRobin_v1 collapse\n" +
-                  "  Arena 2 (lime)   — Phase 2: Master_v1 correct mechanics, aim still broken");
+                  "  Arena 0 (Terra  #DC9878) — Baby AI: Fast_v1 at 500k steps\n" +
+                  "  Arena 1 (Mauve  #B898CC) — Dodge Dominant: RoundRobin_v1 collapse\n" +
+                  "  Arena 2 (Steel  #9AAABB) — Phase 2: Master_v1 correct mechanics, aim still broken");
     }
 
     // Two-line label with a subtitle beneath — used by Legacy Showcase.
@@ -1086,10 +1091,154 @@ public static class PushmanSetup
 
         volume.sharedProfile = profile;
         EditorUtility.SetDirty(volumeGO);
-        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
 
+        // Remove any scene skybox — in URP the Lighting skybox overrides camera.clearFlags at
+        // runtime even when clearFlags = SolidColor, causing Play mode to show the default blue.
+        // Nulling it forces URP to fall back to the camera's solid background colour.
+        // Null out the scene skybox so URP falls back to camera.backgroundColor at runtime.
+        RenderSettings.skybox = null;
+
+        // URP requires renderPostProcessing = true on the camera's UniversalAdditionalCameraData.
+        // Without this the volume exists but URP ignores all post-processing effects at runtime.
+        // Also lock the background to ContentKit Void so Play mode matches the Scene view.
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            // Set editor-side values (Scene view / baked lighting).
+            cam.clearFlags      = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.067f, 0.063f, 0.035f);  // ContentKit Void #111009
+
+            // URP 2D renderer can ignore clearFlags/backgroundColor set in the Editor at Play-mode
+            // start. ContentKitCamera enforces them in Awake so Play mode always matches.
+            if (cam.gameObject.GetComponent<ContentKitCamera>() == null)
+                cam.gameObject.AddComponent<ContentKitCamera>();
+
+            var camData = cam.GetComponent<UniversalAdditionalCameraData>()
+                       ?? cam.gameObject.AddComponent<UniversalAdditionalCameraData>();
+            camData.renderPostProcessing = true;
+            EditorUtility.SetDirty(cam.gameObject);
+            Debug.Log("[PushmanSetup] ContentKit Void background + post-processing enabled on Main Camera.");
+        }
+        else
+        {
+            Debug.LogWarning("[PushmanSetup] No Main Camera found — set background colour and 'Post Processing' manually.");
+        }
+
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("[PushmanSetup] GlobalVolume applied (Bloom threshold=0.85 / intensity=0.35, Vignette=0.25). " +
                   "Re-run in each showcase scene after rebuilding.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 11. Game View resolution presets for recording
+    //     Uses reflection against Unity's internal GameViewSizes API.
+    //     Both add a custom fixed-resolution entry if it doesn't exist, then
+    //     select it — idempotent on repeated calls.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/11a. Set Game View — 4K (3840×2160)")]
+    public static void SetGameView4K()    => SetGameViewResolution(3840, 2160, "4K UHD");
+
+    [MenuItem("Pushman/11b. Set Game View — 1080p (1920×1080)")]
+    public static void SetGameView1080p() => SetGameViewResolution(1920, 1080, "1080p HD");
+
+    private static void SetGameViewResolution(int width, int height, string label)
+    {
+        var T = System.Type.GetType("UnityEditor.GameViewSizes,UnityEditor");
+        if (T == null) { Debug.LogError("[PushmanSetup] GameViewSizes type not found."); return; }
+
+        // 'instance' may be on the type or its ScriptableSingleton<T> base.
+        var instanceProp = T.GetProperty("instance", BindingFlags.Static | BindingFlags.Public)
+                        ?? T.BaseType?.GetProperty("instance", BindingFlags.Static | BindingFlags.Public);
+        if (instanceProp == null) { Debug.LogError("[PushmanSetup] GameViewSizes.instance not found."); return; }
+        var sizes = instanceProp.GetValue(null);
+        if (sizes == null) { Debug.LogError("[PushmanSetup] GameViewSizes instance is null."); return; }
+
+        // GameViewSizeGroup methods are internal — must include NonPublic in binding flags.
+        const BindingFlags BF = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var getGroup = T.GetMethod("GetGroup", BF);
+        if (getGroup == null) { Debug.LogError("[PushmanSetup] GetGroup method not found."); return; }
+        var group = getGroup.Invoke(sizes, new object[] { (int)GameViewSizeGroupType.Standalone });
+        if (group == null) { Debug.LogError("[PushmanSetup] GetGroup returned null."); return; }
+        var gType = group.GetType();
+
+        var getBuiltinCount  = gType.GetMethod("GetBuiltinCount",  BF);
+        var getCustomCount   = gType.GetMethod("GetCustomCount",   BF);
+        var getGameViewSize  = gType.GetMethod("GetGameViewSize",  BF);  // Unity 6: replaced GetCustom
+        var addCustomSize    = gType.GetMethod("AddCustomSize",    BF);
+
+        if (getBuiltinCount == null || getCustomCount == null || getGameViewSize == null)
+        {
+            var methods = string.Join(", ", System.Array.ConvertAll(gType.GetMethods(BF), m => m.Name));
+            Debug.LogError($"[PushmanSetup] GameViewSizeGroup methods not found. Available: {methods}");
+            return;
+        }
+
+        int builtinCount = (int)getBuiltinCount.Invoke(group, null);
+        int customCount  = (int)getCustomCount.Invoke(group, null);
+
+        // Unity 6: GetGameViewSize(totalIndex) replaces GetCustom(customIndex).
+        // Total index = builtin count + custom offset.
+        int targetIndex = -1;
+        for (int i = 0; i < customCount; i++)
+        {
+            var s = getGameViewSize.Invoke(group, new object[] { builtinCount + i });
+            if (s == null) continue;
+            var wProp = s.GetType().GetProperty("width",  BF);
+            var hProp = s.GetType().GetProperty("height", BF);
+            if (wProp == null || hProp == null) continue;
+            int w = (int)wProp.GetValue(s);
+            int h = (int)hProp.GetValue(s);
+            if (w == width && h == height) { targetIndex = builtinCount + i; break; }
+        }
+
+        if (targetIndex < 0)
+        {
+            var sizeT    = System.Type.GetType("UnityEditor.GameViewSize,UnityEditor");
+            var sizeEnum = System.Type.GetType("UnityEditor.GameViewSizeType,UnityEditor");
+            if (sizeT == null || sizeEnum == null) { Debug.LogError("[PushmanSetup] GameViewSize types not found."); return; }
+            var fixedRes = System.Enum.Parse(sizeEnum, "FixedResolution");
+            var ctor = sizeT.GetConstructor(new System.Type[] { sizeEnum, typeof(int), typeof(int), typeof(string) });
+            if (ctor == null) { Debug.LogError("[PushmanSetup] GameViewSize constructor not found."); return; }
+            if (addCustomSize == null) { Debug.LogError("[PushmanSetup] AddCustomSize not found."); return; }
+            addCustomSize.Invoke(group, new object[] { ctor.Invoke(new object[] { fixedRes, width, height, label }) });
+            customCount = (int)getCustomCount.Invoke(group, null);
+            targetIndex = builtinCount + customCount - 1;
+        }
+
+        var gvT = System.Type.GetType("UnityEditor.GameView,UnityEditor");
+        if (gvT == null) { Debug.LogError("[PushmanSetup] GameView type not found."); return; }
+
+        // Do NOT call GetWindow() inside a MenuItem — it triggers an assertion.
+        // Find the existing Game view via FindObjectsOfTypeAll instead.
+        var existing = Resources.FindObjectsOfTypeAll(gvT);
+        if (existing == null || existing.Length == 0)
+        {
+            Debug.LogWarning("[PushmanSetup] Game view not open. Open the Game tab first, then re-run.");
+            return;
+        }
+        var gv = (EditorWindow)existing[0];
+
+        // Defer the actual selection one frame so we're outside the MenuItem call stack.
+        int idx = targetIndex;
+        EditorApplication.delayCall += () =>
+        {
+            var prop = gvT.GetProperty("selectedSizeIndex",
+                           BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (prop != null)
+            {
+                prop.SetValue(gv, idx);
+            }
+            else
+            {
+                var cb = gvT.GetMethod("SizeSelectionCallback",
+                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (cb != null) cb.Invoke(gv, new object[] { idx, null });
+                else Debug.LogError("[PushmanSetup] Cannot set size — selectedSizeIndex and SizeSelectionCallback both missing.");
+            }
+            gv.Repaint();
+            Debug.Log($"[PushmanSetup] Game view → {width}×{height} ({label}).");
+        };
     }
 
     // -----------------------------------------------------------------------
@@ -1183,8 +1332,10 @@ public static class PushmanSetup
         var cam = Camera.main;
         if (cam != null)
         {
-            cam.orthographic     = true;
-            cam.orthographicSize = 12f;
+            cam.orthographic       = true;
+            cam.orthographicSize   = 12f;
+            cam.clearFlags         = CameraClearFlags.SolidColor;
+            cam.backgroundColor    = new Color(0.067f, 0.063f, 0.035f);  // ContentKit Void #111009
             cam.transform.position = new Vector3(0f, 0f, -10f);
             EditorUtility.SetDirty(cam);
         }
@@ -1753,17 +1904,17 @@ public static class PushmanSetup
             return;
         }
 
-        // --- Wire up Player1 (green) ---
+        // --- Wire up Player1 (Mauve Bright) ---
         GameObject p1GO = GameObject.Find("Arena/Player1");
         if (p1GO != null)
             ApplyPlayerSprites(p1GO, circleSprite, pushSprite, blockSprite,
-                               new Color(0.2f, 0.8f, 0.2f));  // green
+                               new Color(0.722f, 0.596f, 0.800f));  // Mauve Bright #B898CC
 
-        // --- Wire up Player2 (red) ---
+        // --- Wire up Player2 (Terra Bright) ---
         GameObject p2GO = GameObject.Find("Arena/Player2");
         if (p2GO != null)
             ApplyPlayerSprites(p2GO, circleSprite, pushSprite, blockSprite,
-                               new Color(0.8f, 0.2f, 0.2f));  // red
+                               new Color(0.863f, 0.596f, 0.471f));  // Terra Bright #DC9878
 
         // --- Screen-space stamina HUD (replaces old world-space bars) ---
         if (p1GO != null || p2GO != null) CreateStaminaHUD(p1GO, p2GO);
@@ -2005,37 +2156,47 @@ public static class PushmanSetup
     // Score label anchored to a top corner. Uses TextMeshProUGUI with Rajdhani font.
     private static TextMeshProUGUI CreateScoreText(Transform hudParent, bool isLeft, Color color)
     {
-        const float MARGIN = 20f;
-        const float SIZE   = 100f;
+        const float MARGIN = 32f;  // inset from screen edge
+        const float W      = 120f;
+        const float H      = 90f;
 
-        var go = new GameObject(isLeft ? "P1Score" : "P2Score");
-        go.transform.SetParent(hudParent, false);
-        var rt = go.AddComponent<RectTransform>();
-
+        // Outer container (anchors + positioning)
+        var container = new GameObject(isLeft ? "P1ScoreContainer" : "P2ScoreContainer");
+        container.transform.SetParent(hudParent, false);
+        var crt = container.AddComponent<RectTransform>();
         if (isLeft)
         {
-            rt.anchorMin        = new Vector2(0f, 1f);
-            rt.anchorMax        = new Vector2(0f, 1f);
-            rt.pivot            = new Vector2(0f, 1f);
-            rt.anchoredPosition = new Vector2(MARGIN, -MARGIN);
+            crt.anchorMin        = new Vector2(0f, 1f);
+            crt.anchorMax        = new Vector2(0f, 1f);
+            crt.pivot            = new Vector2(0f, 1f);
+            crt.anchoredPosition = new Vector2(MARGIN, -MARGIN);
         }
         else
         {
-            rt.anchorMin        = new Vector2(1f, 1f);
-            rt.anchorMax        = new Vector2(1f, 1f);
-            rt.pivot            = new Vector2(1f, 1f);
-            rt.anchoredPosition = new Vector2(-MARGIN, -MARGIN);
+            crt.anchorMin        = new Vector2(1f, 1f);
+            crt.anchorMax        = new Vector2(1f, 1f);
+            crt.pivot            = new Vector2(1f, 1f);
+            crt.anchoredPosition = new Vector2(-MARGIN, -MARGIN);
         }
-        rt.sizeDelta = new Vector2(SIZE, SIZE);
+        crt.sizeDelta = new Vector2(W, H);
+
+        // Score text — no backing panel, floats directly in the corner
+        var go = new GameObject(isLeft ? "P1Score" : "P2Score");
+        go.transform.SetParent(container.transform, false);
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
 
         var txt = go.AddComponent<TextMeshProUGUI>();
-        txt.text              = "0";
-        txt.fontSize          = 56;
-        txt.fontStyle         = FontStyles.Bold;
-        txt.color             = color;
-        txt.alignment         = isLeft ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.TopRight;
-        txt.textWrappingMode  = TextWrappingModes.NoWrap;
-        txt.overflowMode      = TextOverflowModes.Overflow;
+        txt.text             = "0";
+        txt.fontSize         = 72;
+        txt.fontStyle        = FontStyles.Bold;
+        txt.color            = color;
+        txt.alignment        = isLeft ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight;
+        txt.textWrappingMode = TextWrappingModes.NoWrap;
+        txt.overflowMode     = TextOverflowModes.Overflow;
         var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Fonts/Rajdhani-Medium SDF.asset");
         if (font != null) txt.font = font;
 

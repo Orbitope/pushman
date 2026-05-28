@@ -127,24 +127,20 @@ public class Player : MonoBehaviour
 
         Color targetColor;
 
+        // All states blend with baseColor so the player's identity hue remains readable.
+        // Mix ratio kept low (0.35–0.45) — enough to signal the state without washing out the color.
         if (currentState == PlayerState.Stunned)
-            targetColor = Color.gray;
+            targetColor = Color.Lerp(baseColor, Color.gray, 0.45f);                 // desaturated, still tinted
         else if (currentState == PlayerState.Dodging)
-            targetColor = new Color(0.25f, 0.55f, 1f);                              // vivid blue dash
+            targetColor = Color.Lerp(baseColor, new Color(0.25f, 0.55f, 1f), 0.40f); // blue hint over body color
         else if (currentState == PlayerState.Blocking)
-            targetColor = Color.Lerp(baseColor, new Color(0.4f, 0.85f, 1f), 0.55f); // cyan tint, keeps P1/P2 hue
+            targetColor = Color.Lerp(baseColor, new Color(0.4f, 0.85f, 1f), 0.35f); // subtle cyan shield tint
         else if (currentState == PlayerState.Charging)
-            targetColor = Color.white * 1.2f;                                       // bright white glow
+            targetColor = Color.Lerp(baseColor, Color.white, 0.40f);               // brightens without going white
         else
             targetColor = baseColor;
 
         // 8/s lerp — fast enough that even a 0.25s dodge visibly registers.
-        // Skip one frame if we're still above white (hit flash hasn't started fading yet).
-        if (spriteRenderer.color.r > 1.05f || spriteRenderer.color.g > 1.05f || spriteRenderer.color.b > 1.05f)
-        {
-            spriteRenderer.color = Color.Lerp(spriteRenderer.color, Color.white, Time.deltaTime * 12f);
-            return;
-        }
         spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 8f);
     }
 
@@ -279,7 +275,7 @@ public class Player : MonoBehaviour
     /// </summary>
     public void TriggerHitFlash()
     {
-        if (spriteRenderer != null) spriteRenderer.color = Color.white * 2f; // HDR-ish pop
+        if (spriteRenderer != null) spriteRenderer.color = Color.Lerp(baseColor, Color.white, 0.75f); // bright but identity still readable
     }
 
     public void ApplyImpulse(Vector2 force) => rb.AddForce(force, ForceMode2D.Impulse);
