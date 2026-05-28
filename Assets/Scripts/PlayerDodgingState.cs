@@ -4,16 +4,17 @@ public class PlayerDodgingState : PlayerStateBase
 {
     private float dodgeEndTime;
     private float savedDamping;
+    private bool _hitSomething;
 
     public override void BeginState()
     {
-        if (!player.CanUseStamina(player.stats.dodgeStamina))
+        _hitSomething = false;
+
+        if (!player.TryDodge(player.stats.dodgeStamina))
         {
             player.SetState(Player.PlayerState.Moving);
             return;
         }
-
-        player.UseStamina(player.stats.dodgeStamina);
 
         // Kill damping for the duration of the dash so the force isn't eaten by drag.
         // At damping=2 a force-10 dash only travels ~2 units; with damping=0 it travels the full arc.
@@ -28,6 +29,9 @@ public class PlayerDodgingState : PlayerStateBase
         if (player.animator != null) player.animator.SetTrigger("Dodge");
     }
 
+    /// <summary>Called by Player when this dodge makes contact with another player.</summary>
+    public void NotifyHit() => _hitSomething = true;
+
     public override void UpdateState()
     {
         if (Time.time >= dodgeEndTime)
@@ -38,5 +42,10 @@ public class PlayerDodgingState : PlayerStateBase
     {
         player.Body.linearDamping = savedDamping;
         player.SetVelocity(Vector2.zero);
+
+        // If the dodge ended without touching anyone, apply the miss penalty so that
+        // spamming dodge as a zero-risk move gets a cost signal.
+        if (!_hitSomething)
+            (player.Brain as RLAgentBrain)?.AddDodgeMissedPenalty();
     }
 }

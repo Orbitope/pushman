@@ -5,21 +5,39 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/ML_Training_RoundRobin.unity
+    guid: fc1fda4bf8f054e3a861ec3acc7061d5
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 8c9cfa26abfee488c85f1582747f6a02
-  - enabled: 1
-    path: Assets/Scenes/ML_Training_Scene.unity
-    guid: e8fdf468459a3429799b8c9c5e5f1bd9
   - enabled: 0
     path: Assets/Scenes/ML_Training_Scene.unity
     guid: e8fdf468459a3429799b8c9c5e5f1bd9
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/ML_Training_Scene_Small.unity
     guid: 9c5aa0f4b1a984b09b1416737768017b
   - enabled: 0
     path: Assets/Scenes/BotVsBot.unity
     guid: 08a486f0bddcb48fb98d26fc4e988278
+  - enabled: 0
+    path: Assets/Scenes/ML_Training_Mixed.unity
+    guid: 841e649d7656e404b8ee609770685182
+  - enabled: 0
+    path: Assets/Scenes/PersonalityShowcase.unity
+    guid: e1326ea76aa484f338a54503454bcc18
+  - enabled: 0
+    path: Assets/Scenes/DifficultyShowcase.unity
+    guid: 9c186106f44ff4a7f850f8f579c22b66
+  - enabled: 0
+    path: Assets/Scenes/ML_Training_Scene.unity
+    guid: e8fdf468459a3429799b8c9c5e5f1bd9
+  - enabled: 0
+    path: Assets/Scenes/CharacterShowcase.unity
+    guid: 4734a44c92f94488caeca5e4136c547b
+  - enabled: 0
+    path: Assets/Scenes/LegacyShowcase.unity
+    guid: 9d72eb390ecdc4f0793fd4ca124199aa
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

@@ -9,7 +9,7 @@ public class Player : MonoBehaviour
 
     [Header("Combat")]
     public LayerMask opponentLayer;
-    public float pushHitRadius = 0.6f;
+    public float pushHitRadius = 0.8f;
     public float pushHitOffset = 0.7f;
 
     // Stamina UI is handled by StaminaHUD (screen-space canvas) — no field needed here.
@@ -30,6 +30,9 @@ public class Player : MonoBehaviour
     public Rigidbody2D Body => rb;
     public Animator animator;
     public float currentStamina;
+
+    // Stamina regen boost tracking
+    private float _timeInMovingState;
 
     // State Scripts
     public PlayerMovingState movingStateScript;
@@ -89,10 +92,21 @@ public class Player : MonoBehaviour
         currentStateScript?.UpdateState();
 
         // Regen only while Moving — not while stunned/charging/blocking/dodging.
-        // This makes stamina feel meaningful: you must disengage to recover.
-        if (stats != null && currentState == PlayerState.Moving)
+        // Moving-state timer accumulates to unlock a regen boost (reward for disengaging).
+        if (stats != null)
         {
-            currentStamina = Mathf.Min(stats.maxStamina, currentStamina + stats.staminaRegenRate * Time.deltaTime);
+            if (currentState == PlayerState.Moving)
+            {
+                _timeInMovingState += Time.deltaTime;
+                float rate = _timeInMovingState >= stats.regenBoostThreshold
+                    ? stats.staminaRegenRate * stats.regenBoostMultiplier
+                    : stats.staminaRegenRate;
+                currentStamina = Mathf.Min(stats.maxStamina, currentStamina + rate * Time.deltaTime);
+            }
+            else
+            {
+                _timeInMovingState = 0f;
+            }
         }
 
         UpdateStateColor();
@@ -111,18 +125,23 @@ public class Player : MonoBehaviour
     {
         if (spriteRenderer == null) return;
 
-        Color targetColor = baseColor;
+        Color targetColor;
 
+        // All states blend with baseColor so the player's identity hue remains readable.
+        // Mix ratio kept low (0.35–0.45) — enough to signal the state without washing out the color.
         if (currentState == PlayerState.Stunned)
-            targetColor = Color.gray;
+            targetColor = Color.Lerp(baseColor, Color.gray, 0.45f);                 // desaturated, still tinted
         else if (currentState == PlayerState.Dodging)
-            targetColor = new Color(0.5f, 0.8f, 1f);  // blue flash while dodging
+            targetColor = Color.Lerp(baseColor, new Color(0.25f, 0.55f, 1f), 0.40f); // blue hint over body color
+        else if (currentState == PlayerState.Blocking)
+            targetColor = Color.Lerp(baseColor, new Color(0.4f, 0.85f, 1f), 0.35f); // subtle cyan shield tint
         else if (currentState == PlayerState.Charging)
-            targetColor = Color.white * 1.2f;           // bright white while charging
+            targetColor = Color.Lerp(baseColor, Color.white, 0.40f);               // brightens without going white
         else
             targetColor = baseColor;
 
-        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 5f);
+        // 8/s lerp — fast enough that even a 0.25s dodge visibly registers.
+        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 8f);
     }
 
     public void SetState(PlayerState newState)
@@ -165,18 +184,20 @@ public class Player : MonoBehaviour
 
             if (blocked)
             {
-                other.SetState(PlayerState.Moving); // break the block
+                // Block prevents the push — blocker stays in Blocking state
                 otherRL?.AddSuccessfulBlockReward();
                 myRL?.AddPushBlockedReward();
-                Stun(0.5f);                          // pusher staggered
-                ApplyImpulse(-pushDir * strength);
+                Stun(0.2f);                          // pusher recovery frames (push stopped by block)
             }
             else
             {
                 other.Stun(0.5f);
+                other.TriggerHitFlash();
                 other.ApplyImpulse(pushDir * strength);
                 otherRL?.AddTakeHitReward();
-                myRL?.AddLandPushReward();
+                // Pass victim's position so the brain can compute the edge-hit bonus.
+                // A hit at the ring edge ≈ ring-out moment → big bonus; center hit ≈ tiny.
+                myRL?.AddLandPushReward(other.transform.position);
                 Stun(0.2f);                          // recovery frames
             }
             return;
@@ -209,6 +230,7 @@ public class Player : MonoBehaviour
         if (other.currentState == PlayerState.Dodging)
         {
             // Mutual dodge: both fire this callback, so resolve exactly once.
+            dodgingStateScript.NotifyHit();
             if (GetInstanceID() < other.GetInstanceID())
             {
                 Vector2 dir = ((Vector2)(transform.position - other.transform.position)).normalized;
@@ -218,22 +240,55 @@ public class Player : MonoBehaviour
                 other.ApplyImpulse(-dir * other.stats.dodgeForce);
             }
         }
+        else if (other.currentState == PlayerState.Blocking && other.IsFacing(this))
+        {
+            // Dodge breaks block
+            dodgingStateScript.NotifyHit();
+            other.SetState(PlayerState.Moving);
+            RLAgentBrain otherRL = other.Brain as RLAgentBrain;
+            RLAgentBrain myRL = Brain as RLAgentBrain;
+            otherRL?.AddPushBlockedReward();  // blocker penalized
+            myRL?.AddDodgeEvasionReward();    // dodger rewarded for breaking block
+            SetVelocity(Vector2.zero);
+            SetState(PlayerState.Moving);
+            other.Stun(0.3f);
+        }
         else
         {
+            dodgingStateScript.NotifyHit();
             Vector2 hitDir = ((Vector2)(other.transform.position - transform.position)).normalized;
             SetVelocity(Vector2.zero);
             SetState(PlayerState.Moving);
             other.Stun(0.5f);
+            other.TriggerHitFlash();
             other.ApplyImpulse(hitDir * stats.dodgeForce);
+            RLAgentBrain myRL = Brain as RLAgentBrain;
+            myRL?.AddDodgeHitReward(other.transform.position);
         }
     }
 
     // --- Helpers ---
 
+    /// <summary>
+    /// Snap the body color to bright white so a push or dodge hit registers visually.
+    /// UpdateStateColor's 8/s lerp naturally fades it back — no coroutine needed.
+    /// </summary>
+    public void TriggerHitFlash()
+    {
+        if (spriteRenderer != null) spriteRenderer.color = Color.Lerp(baseColor, Color.white, 0.75f); // bright but identity still readable
+    }
+
     public void ApplyImpulse(Vector2 force) => rb.AddForce(force, ForceMode2D.Impulse);
     public void SetVelocity(Vector2 velocity) => rb.linearVelocity = velocity;
     public bool CanUseStamina(float amount) => currentStamina >= amount;
     public void UseStamina(float amount) => currentStamina = Mathf.Max(0f, currentStamina - amount);
+
+    public bool TryDodge(float cost)
+    {
+        if (!CanUseStamina(cost)) return false;
+        UseStamina(cost);
+        return true;
+    }
 
     public void Stun(float duration)
     {

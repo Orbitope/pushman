@@ -24,9 +24,9 @@ behaviors:
       normalize: false
       hidden_units: 128
       num_layers: 2
-      use_recurrent: true     # LSTM — learns to recognize charge-up and block-break tells over time
-      sequence_length: 64
-      memory_size: 128
+      memory:
+        memory_size: 128
+        sequence_length: 64
 
     reward_signals:
       extrinsic:

@@ -1,0 +1,70 @@
+# Pushman — Phase 3 v2: Shared-Network Round-Robin (clean obs only)
+#
+# Single `Pushman` behavior trained from scratch. All 90 agents (45 arenas × 2)
+# feed one shared network. 5 personalities differentiated by:
+#   - Per-agent BotPersonality SO reward stream (different reward values)
+#   - Self-personality one-hot observation (5 dims)
+#
+# Opponent personality is intentionally NOT observed — agent reacts to opponent
+# behavior, which works the same against bot or human at inference time.
+#
+# Humanization (noise + delay) is NOT enabled here. v2 trains clean obs only
+# (humanization=0). Phase 3.5 warm-starts from this checkpoint and adds the
+# noise/delay randomization. See PLAN.md Section 5 + DEV_NOTES.md for rationale.
+#
+# Launch (rebuild standalone first — round-robin must be the only enabled scene):
+#   ./train.sh --standalone --config=ppo_shared_v2 --id=Pushman_Shared_v2 --force
+#
+# Fast-fail check during the first ~3 min:
+#   - Confirm "Behavior name 'Pushman'" appears (NOT 5 separate behavior blocks)
+#   - Confirm "Observation space size: 23" (selfKin=3 + stamina=1 + state=1 +
+#     selfStats=5 + selfPersonality=5 + arena=3 + opp=5 = 23)
+#   - Confirm NO "Failed to load init_path" warning (we're training from scratch)
+#
+# Export after run (~10 h target):
+#   results/Pushman_Shared_v2/Pushman/  →  Assets/MLModels/Pushman_Shared/PushmanAgent_v2.onnx
+
+behaviors:
+
+  Pushman:
+    trainer_type: ppo
+
+    hyperparameters:
+      # Bigger than v1 — 90 agents feed one network vs ~18 per behavior in v1's 5-network setup.
+      # Larger batch absorbs the increased experience throughput.
+      batch_size: 2048
+      buffer_size: 32768
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+
+    network_settings:
+      # ON for v2 — reward scale is now ±10 (was ±2 in v1). Without normalize,
+      # the value function takes longer to settle.
+      normalize: true
+      # Slightly larger than v1 (128 → 256) to absorb the extra 5 self-personality
+      # observation dims and the more diverse policy across 5 reward streams.
+      hidden_units: 256
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+    # Train from scratch — NO init_path. The v1 checkpoint encodes a value
+    # function under the old reward scale (~±2) that's now 6.7× smaller than ours,
+    # and an action-value preference for dodge over push that we're explicitly
+    # inverting. Warm-start would waste 500k+ steps un-learning before improving.
+    # See DEV_NOTES.md → "No warm-start from v1" for the full reasoning.
+
+    max_steps: 30_000_000   # extended from 10M — entropy was 3.68/4.68 (79% random) at 10M
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="660" viewBox="0 0 800 660">
+  <defs>
+    <marker id="arr-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#E8C068"/>
+    </marker>
+    <marker id="arr-sage" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#9ABB86"/>
+    </marker>
+    <marker id="arr-steel" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#9AAABB"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="660" fill="#111009"/>
+
+  <!-- Title -->
+  <text x="400" y="46" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="24" font-weight="bold" fill="#E8E4D8" letter-spacing="4">COMBAT TRIANGLE</text>
+  <text x="400" y="70" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="13" fill="#6A6358" letter-spacing="1">each action counters exactly one other</text>
+
+  <!-- ── Arrows (drawn before nodes so nodes paint over the line ends) ── -->
+
+  <!-- PUSH beats DODGE  (Amber, right side, bowing outward) -->
+  <!-- start: Push perimeter toward Dodge, end: Dodge perimeter from Push -->
+  <!-- control: midpoint of edge bowed outward away from triangle centre -->
+  <path d="M 436 192 Q 590 280 589 458"
+        stroke="#E8C068" stroke-width="3" fill="none"
+        marker-end="url(#arr-amber)"/>
+
+  <!-- DODGE beats BLOCK  (Sage, bottom, bowing downward) -->
+  <path d="M 553 520 Q 400 612 247 520"
+        stroke="#9ABB86" stroke-width="3" fill="none"
+        marker-end="url(#arr-sage)"/>
+
+  <!-- BLOCK beats PUSH  (Steel, left side, bowing outward) -->
+  <path d="M 211 458 Q 210 280 364 192"
+        stroke="#9AAABB" stroke-width="3" fill="none"
+        marker-end="url(#arr-steel)"/>
+
+  <!-- "beats" labels at bezier midpoints (outward side) -->
+  <text x="572" y="292" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#E8C068" opacity="0.75" font-style="italic">beats</text>
+  <text x="400" y="582" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#9ABB86" opacity="0.75" font-style="italic">beats</text>
+  <text x="226" y="292" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#9AAABB" opacity="0.75" font-style="italic">beats</text>
+
+  <!-- ── Nodes ── -->
+
+  <!-- PUSH (top centre) — Amber -->
+  <circle cx="400" cy="130" r="72" fill="#1A1810" stroke="#E8C068" stroke-width="2.5"/>
+  <text x="400" y="123" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="22" font-weight="bold" fill="#E8C068" letter-spacing="3">PUSH</text>
+  <text x="400" y="148" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358">charge &amp; release</text>
+
+  <!-- BLOCK (bottom left) — Steel -->
+  <circle cx="175" cy="520" r="72" fill="#1A1810" stroke="#9AAABB" stroke-width="2.5"/>
+  <text x="175" y="513" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="22" font-weight="bold" fill="#9AAABB" letter-spacing="3">BLOCK</text>
+  <text x="175" y="538" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358">hold to shield</text>
+
+  <!-- DODGE (bottom right) — Sage -->
+  <circle cx="625" cy="520" r="72" fill="#1A1810" stroke="#9ABB86" stroke-width="2.5"/>
+  <text x="625" y="513" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="22" font-weight="bold" fill="#9ABB86" letter-spacing="3">DODGE</text>
+  <text x="625" y="538" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358">dash through</text>
+
+  <!-- Centre annotation -->
+  <text x="400" y="343" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="13" fill="#3A3830">rock</text>
+  <text x="400" y="362" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="13" fill="#3A3830">paper</text>
+  <text x="400" y="381" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="13" fill="#3A3830">scissors</text>
+</svg>

@@ -1,0 +1,75 @@
+# Pushman — Phase 3.9: Drop self-play, fix dodge, clean convergence
+#
+# Problem with v37 and v38: self-play caused monotonically declining ELO and
+# shorter episode lengths than v3 (57 steps vs v3's 144). The ghost pool was
+# built from snapshots trained under different physics (v37 warm-started from
+# v3 under pushForce=12; v38 warm-started from v37 under drag=2). Comparing
+# ELO across those boundaries is meaningless, and the self-play pressure drove
+# hyper-aggressive ring-out policies rather than the richer multi-hit fights
+# we want. Round-robin with 5 personalities already provides diversity.
+#
+# Physics changes carried forward from v38 (already in assets, no rebuild needed
+# if standalone was built for v38):
+#   - drag 4 (was 2)
+#   - pushChargeMultiplier 1.0 (was 1.5) for Default + Heavyweight
+#   - Heavyweight: pushForce 7 (was 11), weight 2.0 (was 2.5)
+#
+# New changes vs v38:
+#   - Self-play REMOVED — pure round-robin, both players learn every step
+#   - dodgeForce 9→14, dodgeStamina 40→25 (Default): drag=4 halved dodge collision
+#     effectiveness (2.25u vs 4.5u per hit); this restores it to ~3.5u — weaker
+#     than a full push but viable. Cheaper stamina cost makes defensive dodge worthwhile.
+#   - Heavyweight dodgeStamina 50→35: still costly for a tank but not prohibitive
+#   - Warm-start from v38: adapted to current physics, avoids re-learning from scratch
+#   - LR raised 3e-4: no self-play variance → faster convergence from warm-start
+#
+# Fast-fail checks (first ~3 min):
+#   - "[RLAgentBrain] Player1 obs=33" in run_logs/Player-0.log
+#   - "Initializing from results/Pushman_Shared_v38/..." in mlagents-learn output
+#   - Episode length should begin rising from ~57 toward 100+ within first 5M steps
+#   - NO Self-Play/ELO scalar in TensorBoard (confirms self-play is off)
+#
+# Launch:
+#   ./train.sh --standalone --config=ppo_shared_v39 --id=Pushman_Shared_v39 --force
+#
+# Export after run:
+#   results/Pushman_Shared_v39/Pushman/ → Assets/MLModels/Pushman_Shared/PushmanAgent_v39.onnx
+
+behaviors:
+
+  Pushman:
+    trainer_type: ppo
+
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 32768
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 5
+
+    network_settings:
+      normalize: true
+      hidden_units: 256
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+    # Warm-start from v38: already adapted to drag=4/chargeMultiplier=1.0 physics.
+    init_path: results/Pushman_Shared_v38/Pushman/Pushman-20000100.pt
+
+    # No self_play block — round-robin only. Both players train every step.
+    # 5 personalities × round-robin matchups already provide opponent diversity.
+
+    max_steps: 45_000_000   # warm-start carries v38's 20M step count; trains 25M new steps
+    time_horizon: 128
+    summary_freq: 20_000
+    keep_checkpoints: 5

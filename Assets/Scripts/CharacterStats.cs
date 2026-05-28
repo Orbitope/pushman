@@ -12,6 +12,12 @@ public class CharacterStats : ScriptableObject
     public float staminaRegenRate = 8f;
     public float blockStaminaUsageRate = 15f;
 
+    [Header("Stamina Regen Boost")]
+    [Tooltip("Seconds spent in Moving state before the regen boost activates. Rewards disengaging.")]
+    public float regenBoostThreshold = 0.75f;
+    [Tooltip("Multiplier applied to staminaRegenRate after regenBoostThreshold is reached.")]
+    public float regenBoostMultiplier = 2.5f;
+
     [Header("Dodge")]
     public float dodgeForce = 18f;
     public float dodgeStamina = 40f;

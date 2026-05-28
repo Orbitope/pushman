@@ -18,6 +18,11 @@ public class ArenaManager : MonoBehaviour
     [Header("Players")]
     public List<Player> allPlayers;
 
+    [Header("Character Variety")]
+    [Tooltip("If non-empty, each player is assigned a random CharacterStats from this pool every round. " +
+             "Trains one network that generalises across stat variants. Leave empty for fixed stats.")]
+    public List<CharacterStats> statsPool;
+
     [Header("Spawn Points")]
     public List<Transform> spawnPoints;
 
@@ -29,6 +34,7 @@ public class ArenaManager : MonoBehaviour
     private float currentRingRadius;
     private float shrinkTimer;
     private bool matchRunning;
+    private float matchStartTime;
 
     // Boundary ring visual — updated each frame to match currentRingRadius.
     private SpriteRenderer boundaryRenderer;
@@ -53,14 +59,22 @@ public class ArenaManager : MonoBehaviour
 
         scores = new int[allPlayers.Count];
 
+        // Auto-bootstrap the match-outcome logger (one shared instance for all arenas).
+        if (MatchLogger.Instance == null)
+            new GameObject("MatchLogger").AddComponent<MatchLogger>();
+
         // Cache the ArenaBoundary child so we can resize it as the ring shrinks.
         var boundaryGO = transform.Find("ArenaBoundary");
         if (boundaryGO != null)
         {
             boundaryRenderer = boundaryGO.GetComponent<SpriteRenderer>();
-            // The boundary was scaled so its world diameter = ringOutRadius * 2.
-            // Store the initial scale-to-radius ratio.
+            // Remember the initial scale set by PushmanSetup (which scales ring to diameter = ringOutRadius * 2).
+            // Sprite is 256px at 100 PPU = 2.56 units, so scale = (ringOutRadius * 2) / 2.56.
+            // Store this as the native radius for scaling calculations.
             boundaryNativeRadius = ringOutRadius;
+            // Cache the initial scale so we can scale relative to it.
+            float initialScale = boundaryGO.transform.localScale.x;
+            boundaryNativeRadius = ringOutRadius / initialScale;
         }
 
         StartMatch();
@@ -72,6 +86,7 @@ public class ArenaManager : MonoBehaviour
         currentRingRadius = ringOutRadius;
         shrinkTimer = 0f;
         matchRunning = true;
+        matchStartTime = Time.time;
         ResetAllPlayers();
     }
 
@@ -133,7 +148,18 @@ public class ArenaManager : MonoBehaviour
         if (activePlayers.Count <= 1)
         {
             if (activePlayers.Count == 1)
-                (activePlayers[0].Brain as RLAgentBrain)?.RegisterWin();
+            {
+                Player winner = activePlayers[0];
+                (winner.Brain as RLAgentBrain)?.RegisterWin();
+
+                // Log the decided match for permutation analysis — one row per loser.
+                if (MatchLogger.Instance != null)
+                {
+                    float duration = Time.time - matchStartTime;
+                    foreach (var loser in ringOuts)
+                        MatchLogger.Instance.LogMatch(winner, loser, duration);
+                }
+            }
 
             StartCoroutine(RingOutSequence());
         }
@@ -190,6 +216,16 @@ public class ArenaManager : MonoBehaviour
             p.transform.position = spawn.position;
             p.transform.rotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
             if (rb != null) { rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f; }
+
+            // Randomise stats each round if a pool is provided — teaches the agent to
+            // adapt its playstyle based on its self-observed CharacterStats.
+            if (statsPool != null && statsPool.Count > 0)
+            {
+                var chosen = statsPool[Random.Range(0, statsPool.Count)];
+                p.stats = chosen;
+                Rigidbody2D prb = p.GetComponent<Rigidbody2D>();
+                if (prb != null) prb.mass = chosen.weight;
+            }
 
             p.currentStamina = p.stats != null ? p.stats.maxStamina : 0f;
             p.SetState(Player.PlayerState.Moving);

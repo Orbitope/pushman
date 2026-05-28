@@ -1,0 +1,43 @@
+# Pushman — Warm-start verification test (DISPOSABLE)
+# Purpose: prove that a non-self-play PPO trainer can init_path from the
+# Pushman_Master_v1 self-play checkpoint without "Failed to load" errors.
+# Mirrors the exact per-behavior structure ppo_roundrobin.yaml will use.
+# Capped at 50k steps — only the first-second load message matters.
+#
+# Launch: ./train.sh --standalone --config=ppo_warmstart_test --id=Pushman_WarmstartTest --force
+
+behaviors:
+  PushmanAgent:
+    trainer_type: ppo
+
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 16384
+      learning_rate: 2.0e-4
+      learning_rate_schedule: linear
+      beta: 0.005
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+
+    network_settings:
+      normalize: false
+      hidden_units: 128
+      num_layers: 2
+      memory:
+        memory_size: 128
+        sequence_length: 64
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+    # The thing under test — warm-start from the Phase 2 master checkpoint.
+    init_path: results/Pushman_Master_v1/PushmanAgent/PushmanAgent-20000528.pt
+
+    # No self_play block — exactly like ppo_roundrobin.yaml will be.
+    max_steps: 50_000
+    time_horizon: 128
+    summary_freq: 10_000
+    keep_checkpoints: 2
