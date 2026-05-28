@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>
 /// Screen-space HUD: stamina bars (bottom corners) + round score (top corners).
@@ -16,8 +17,8 @@ public class StaminaHUD : MonoBehaviour
     public Image p2Fill;
 
     [Header("Score Text")]
-    public Text p1ScoreText;
-    public Text p2ScoreText;
+    public TextMeshProUGUI p1ScoreText;
+    public TextMeshProUGUI p2ScoreText;
 
     // Base colors set by PushmanSetup; cached so we can tint on low stamina.
     private Color p1BaseColor;

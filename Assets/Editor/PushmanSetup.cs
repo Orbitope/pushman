@@ -8,6 +8,8 @@ using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using TMPro;
 
 // Pushman > 1. Setup Test Scene  — builds the SampleScene from scratch
@@ -400,10 +402,10 @@ public static class PushmanSetup
 
         var tiers = new (float humanization, string label, Color color)[]
         {
-            (0.0f,  "EXPERT", new Color(0.20f, 0.85f, 0.30f)),  // green
-            (0.33f, "HARD",   new Color(0.95f, 0.85f, 0.15f)),  // yellow
-            (0.66f, "MEDIUM", new Color(0.95f, 0.55f, 0.15f)),  // orange
-            (1.0f,  "EASY",   new Color(0.95f, 0.30f, 0.25f)),  // red
+            (0.0f,  "EXPERT", new Color(0.95f, 0.30f, 0.25f)),  // red   — hardest
+            (0.33f, "HARD",   new Color(0.95f, 0.55f, 0.15f)),  // orange
+            (0.66f, "MEDIUM", new Color(0.95f, 0.85f, 0.15f)),  // yellow
+            (1.0f,  "EASY",   new Color(0.20f, 0.85f, 0.30f)),  // green — easiest
         };
 
         EnsureFolders();
@@ -1031,6 +1033,63 @@ public static class PushmanSetup
         MakeTMPWorldLabel(arenaGO, "Label_stats", statsLine,          FontBody,  1.2f,
                           new Color(0.604f, 0.580f, 0.518f),  // Text Secondary #9A9484
                           new Vector3(0f, yTop - 0.5f, 0f));
+    }
+
+    // -----------------------------------------------------------------------
+    // 10. ContentKit Scene Setup — Global Volume (Bloom + Vignette)
+    //     Run this in any showcase scene after building it.
+    //     Idempotent: removes the existing GlobalVolume GO first.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/10. Apply ContentKit Scene Setup")]
+    public static void ApplyContentKitSceneSetup()
+    {
+        // Remove any existing volume so this is idempotent.
+        var existing = GameObject.Find("GlobalVolume");
+        if (existing != null) Object.DestroyImmediate(existing);
+
+        // Create the Global Volume GameObject.
+        var volumeGO = new GameObject("GlobalVolume");
+        var volume   = volumeGO.AddComponent<Volume>();
+        volume.isGlobal = true;
+        volume.weight   = 1f;
+
+        // Create or load the VolumeProfile asset.
+        const string PROFILE_PATH = "Assets/Settings/ShowcaseVolumeProfile.asset";
+        var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(PROFILE_PATH);
+        if (profile == null)
+        {
+            profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            AssetDatabase.CreateAsset(profile, PROFILE_PATH);
+        }
+
+        // Bloom — subtle glow on Amber Bright elements.
+        if (!profile.TryGet<Bloom>(out var bloom))
+            bloom = profile.Add<Bloom>(true);
+        bloom.active = true;
+        bloom.threshold.Override(0.85f);  // only very bright pixels bloom
+        bloom.intensity.Override(0.35f);  // gentle — not HDR-heavy
+        bloom.scatter.Override(0.70f);    // diffuse spread
+        bloom.tint.Override(new Color(1f, 0.92f, 0.75f));  // warm Amber tint on bloom
+
+        // Vignette — subtle corner darkening focuses eye on the arena.
+        if (!profile.TryGet<Vignette>(out var vignette))
+            vignette = profile.Add<Vignette>(true);
+        vignette.active = true;
+        vignette.color.Override(Color.black);
+        vignette.intensity.Override(0.25f);
+        vignette.smoothness.Override(0.5f);
+        vignette.rounded.Override(true);
+
+        EditorUtility.SetDirty(profile);
+        AssetDatabase.SaveAssets();
+
+        volume.sharedProfile = profile;
+        EditorUtility.SetDirty(volumeGO);
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+
+        Debug.Log("[PushmanSetup] GlobalVolume applied (Bloom threshold=0.85 / intensity=0.35, Vignette=0.25). " +
+                  "Re-run in each showcase scene after rebuilding.");
     }
 
     // -----------------------------------------------------------------------
@@ -1823,17 +1882,19 @@ public static class PushmanSetup
         hudGO.AddComponent<UnityEngine.UI.CanvasScaler>();
         hudGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-        // P1 bar — bottom-left, green.
-        Image p1Fill = CreateBarUI(hudGO.transform, isLeft: true,
-                                   new Color(0.2f, 0.85f, 0.2f));   // green
+        // ContentKit HUD palette
+        var p1Color = new Color(0.910f, 0.753f, 0.408f);  // Amber Bright #E8C068 — P1
+        var p2Color = new Color(0.604f, 0.667f, 0.733f);  // Steel Bright #9AAABB — P2
 
-        // P2 bar — bottom-right, red.
-        Image p2Fill = CreateBarUI(hudGO.transform, isLeft: false,
-                                   new Color(0.85f, 0.2f, 0.2f));   // red
+        // P1 bar — bottom-left, Amber Bright.
+        Image p1Fill = CreateBarUI(hudGO.transform, isLeft: true,  p1Color);
 
-        // Score labels — top corners, matching player colors.
-        Text p1Score = CreateScoreText(hudGO.transform, isLeft: true,  new Color(0.2f, 0.85f, 0.2f));
-        Text p2Score = CreateScoreText(hudGO.transform, isLeft: false, new Color(0.85f, 0.2f, 0.2f));
+        // P2 bar — bottom-right, Steel Bright.
+        Image p2Fill = CreateBarUI(hudGO.transform, isLeft: false, p2Color);
+
+        // Score labels — top corners, matching player colors, TMP.
+        TextMeshProUGUI p1Score = CreateScoreText(hudGO.transform, isLeft: true,  p1Color);
+        TextMeshProUGUI p2Score = CreateScoreText(hudGO.transform, isLeft: false, p2Color);
 
         // Wire StaminaHUD via reflection — avoids a hard compile-time editor→runtime dependency.
         // StaminaHUD.Start() also auto-discovers players by name as a fallback.
@@ -1905,7 +1966,7 @@ public static class PushmanSetup
         bgRT.offsetMin = Vector2.zero;
         bgRT.offsetMax = Vector2.zero;
         var bgImg = bgGO.AddComponent<Image>();
-        bgImg.color = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+        bgImg.color = new Color(0.118f, 0.110f, 0.086f, 0.92f);  // ContentKit Surface #1E1C16
 
         // Fill image — Filled type drives bar width from left.
         var fillGO = new GameObject("Fill");
@@ -1941,11 +2002,11 @@ public static class PushmanSetup
         return fillImg;
     }
 
-    // Score label anchored to a top corner. Uses legacy Text (no TMP dependency).
-    private static Text CreateScoreText(Transform hudParent, bool isLeft, Color color)
+    // Score label anchored to a top corner. Uses TextMeshProUGUI with Rajdhani font.
+    private static TextMeshProUGUI CreateScoreText(Transform hudParent, bool isLeft, Color color)
     {
-        const float MARGIN  = 20f;
-        const float SIZE    = 80f;
+        const float MARGIN = 20f;
+        const float SIZE   = 100f;
 
         var go = new GameObject(isLeft ? "P1Score" : "P2Score");
         go.transform.SetParent(hudParent, false);
@@ -1967,13 +2028,16 @@ public static class PushmanSetup
         }
         rt.sizeDelta = new Vector2(SIZE, SIZE);
 
-        var txt = go.AddComponent<Text>();
-        txt.text      = "0";
-        txt.fontSize  = 52;
-        txt.fontStyle = FontStyle.Bold;
-        txt.color     = color;
-        txt.alignment = isLeft ? TextAnchor.UpperLeft : TextAnchor.UpperRight;
-        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var txt = go.AddComponent<TextMeshProUGUI>();
+        txt.text              = "0";
+        txt.fontSize          = 56;
+        txt.fontStyle         = FontStyles.Bold;
+        txt.color             = color;
+        txt.alignment         = isLeft ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.TopRight;
+        txt.textWrappingMode  = TextWrappingModes.NoWrap;
+        txt.overflowMode      = TextOverflowModes.Overflow;
+        var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Fonts/Rajdhani-Medium SDF.asset");
+        if (font != null) txt.font = font;
 
         return txt;
     }

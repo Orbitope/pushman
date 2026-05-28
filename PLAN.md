@@ -6,7 +6,7 @@
 > *why* something is the way it is, check DEV_NOTES.
 
 ## 0. Implementation Status (source of truth — update this first)
-*Updated: 2026-05-28*
+*Updated: 2026-05-28 (evening)*
 
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
@@ -172,14 +172,18 @@ All showcase scenes (6, 7, 8) updated to use v39 ONNX.
     personality colors: Amber Bright/Steel Bright/Mauve Bright/Sage Bright/Terra Bright.
     New sprites: `PlayerCircle.png`, `ArenaFloor.png`, `ArenaBorder.png`.
     Camera background exact Void #111009. Hand sprite positions corrected (visible above body).
-  - ❌ Phase 2 — Lighting: `Pushman/10. Apply ContentKit Scene Setup` — camera Void bg,
-    key/fill lights, Global Volume post-processing.
+  - ✅ Phase 2 — `Pushman/10. Apply ContentKit Scene Setup` — Global Volume with Bloom
+    (threshold=0.85, intensity=0.35, warm Amber tint) + Vignette (intensity=0.25, rounded).
+    Run in each showcase scene after rebuilding. Camera Void bg handled in Phase 1.
+    VolumeProfile saved to `Assets/Settings/ShowcaseVolumeProfile.asset`.
   - ✅ Phase 3 — TMP label migration: all world-space labels → TextMeshPro (Rajdhani titles,
     Inter body); `MakeTMPWorldLabel` helper with `TMP_WORLD_CORRECTION = 7.84f` scale factor
     (TMP 3D renders at fontSize × 0.127 world units — inverse applied via localScale so
     fontSize maps directly to world-unit height). Label vertical spacing recalibrated.
-  - ❌ Phase 4 — HUD redesign: Surface panel backgrounds, Amber/Steel stamina bars,
-    score display with TMP (after Phase 2 done).
+  - ✅ Phase 4 — HUD redesign: Surface `#1E1C16` bar bg; Amber Bright `#E8C068` P1 bar,
+    Steel Bright `#9AAABB` P2 bar; score text migrated from legacy `Text` to
+    `TextMeshProUGUI` with Rajdhani-Medium SDF at fontSize=56. `StaminaHUD.cs`
+    `p1ScoreText`/`p2ScoreText` fields updated to `TextMeshProUGUI`.
 - ✅ Showcase scenes — all 4 world-space showcase scenes complete and playable:
   - `Pushman/6` PersonalityShowcase — 5 arenas, v39 ONNX, personality matchups
   - `Pushman/7` CharacterShowcase — 3 arenas, Default/Heavyweight/Speedster
