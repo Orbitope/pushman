@@ -6,27 +6,59 @@
 > *why* something is the way it is, check DEV_NOTES.
 
 ## 0. Implementation Status (source of truth — update this first)
-*Updated: 2026-05-28 (evening)*
+*Updated: 2026-05-28 (night)*
 
 ### Game: ✅ Playable
 Human vs ChaseBotBrain test scene is fully functional. Run `Pushman/1b` then `Pushman/4` to rebuild.
 
-### RL Training: ✅ Phase 3.9 complete — best model to date
-`Pushman_Shared_v39` complete. 45M steps, pure round-robin (no self-play), drag=4, dodgeForce=14.
+### RL Training: ✅ Complete — v39 is the shipping model
+`Pushman_Shared_v39` is the final model. 45M steps, pure round-robin (no self-play), drag=4, dodgeForce=14.
 ONNX at `Assets/MLModels/Pushman_Shared/PushmanAgent_v39.onnx`.
 
 **Key metrics (45M steps):**
 - Episode length: 115 steps final (v38 was 57, target was 100-150 ✅)
-- Entropy arc: 2.36 → 3.43 (healthy exploration burst after dropping self-play) → 2.25 (converged)
-- Cumulative reward: noisy near 0 (correct for symmetric game — one win = one loss)
-- No ELO scalar in TensorBoard (self-play confirmed off ✅)
-- Training dip at step 11M (73 steps) then solid recovery to 115-125 by step 33M+
+- Entropy arc: 2.36 → 3.43 (healthy re-exploration after dropping self-play) → 2.25 (converged)
+- Cumulative reward: noisy near 0 (correct for symmetric game) ✅
+- Training dip at step 11M then solid recovery to 115-125 by step 33M+
 
-**Notable:** entropy peak at step 5.6M shows the model re-explored after losing self-play pressure —
-healthy sign. Final entropy 2.25 (vs v38 which didn't have this pattern).
+**Difficulty tiers: ✅ Implemented and working**
+Noise/delay humanization code is live in `RLAgentBrain`. v39 trained with random tier sampling
+(`runtimeHumanization = -1` randomises from `{0, 0.33, 0.66, 1.0}` per episode). The
+DifficultyShowcase (Pushman/8) pins each arena to a tier: Expert → Easy left to right.
+No separate Phase 3.5 training run needed — v39 already conditions on difficulty.
 
-All showcase scenes (6, 7, 8) updated to use v39 ONNX.
-**Next:** evaluate in Unity (Pushman/6 → Play), then WebGL build + release prep.
+### Showcase Scenes: ✅ All built, ContentKit visual overhaul complete
+All scenes rebuilt with ContentKit design system (Void bg, Bloom/Vignette, Amber/Steel HUD,
+Mauve/Terra player bodies). `ContentKitCamera` component guarantees Play-mode background.
+- `Pushman/5` Bot vs Bot (single arena, v39)
+- `Pushman/6` PersonalityShowcase (5 arenas, 5 personalities, v39)
+- `Pushman/7` CharacterShowcase (3 arenas, Default/Heavyweight/Speedster, v39)
+- `Pushman/8` DifficultyShowcase (4 arenas, Expert/Hard/Medium/Easy, v39)
+- `Pushman/9` LegacyShowcase (3 arenas, Baby AI / Dodge Dominant / Phase 2)
+- Run `Pushman/10` after any scene rebuild to apply ContentKit bg + post-processing.
+- Run `Pushman/11a` to set Game view to 4K for recording.
+
+### Diagrams: ✅ SVGs in `Diagrams/`
+`combat-triangle.svg` (RPS mechanic) and `state-machine.svg` (6-state flow), ContentKit dark theme.
+
+### Main Menu + Series Flow: ✅ Built and working
+Full menu → game → series → rematch loop is live:
+- `MainMenu.unity` — card-based selection (player char / personality / difficulty / opponent char) + PLAY
+- `Game.unity` — Human P1 vs v39 bot with selected settings; ContentKit visuals, HUD, ring
+- Best-of-3 series via `SeriesManager`; per-round banner + end-game Rematch/Menu overlay
+- `GameConfig` singleton survives scene loads (DontDestroyOnLoad)
+
+**Key gotchas resolved during build:**
+- ONNX must be loaded **after** `EditorSceneManager.NewScene` (otherwise `UnloadUnusedAssets` nulls the reference)
+- New scenes need explicit `InputSystemUIInputModule` (project uses new Input System; `StandaloneInputModule` crashes at runtime)
+- TMP fonts must be assigned via SerializedObject in Pushman/12a (Inspector field stays null otherwise)
+- All `VerticalLayoutGroup`s need `childControlHeight = true` to respect `LayoutElement.preferredHeight`
+- `Pushman/12a` and `Pushman/12b` regenerate scenes from scratch — re-run after changes
+
+### Next up
+1. **WebGL build + release prep** — build target switch, test in browser, publish to itch.io / GitHub Pages
+2. **Phase 4 polish** (4a–4d): audio (SFX), hit effects, charge indicator, arena feel
+3. **Human playtesting** — validate push-on-release feel, stamina costs, shrink timer
 
 > ⚠️ Build hygiene: always verify `[RLAgentBrain] obs=33` in `results/<run>/run_logs/Player-0.log`
 > before walking away from a training launch. The grpc symlink also needs recreating after each
@@ -146,10 +178,11 @@ All showcase scenes (6, 7, 8) updated to use v39 ONNX.
   Win-rate matrix balanced: 48–51% overall range. All 5 personalities distinct.
   Value loss peaked at 10.5 and nudged back — addressed in v2.5 via num_epoch: 5.
   ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v2.onnx`.
-- 🔄 Phase 3.5 — humanization fine-tune. Warm-starts from v2; introduces noise + delay
-  with discrete humanization tiers {0, 0.33, 0.66, 1.0}. ~5M steps. Produces the
-  shipping ONNX deployable at any of the 4 difficulty tiers. num_epoch raised 3→5 to
-  address v2's value loss drift. **UNBLOCKED — ready to implement.**
+- ✅ Phase 3.5 — humanization / difficulty tiers. Noise + delay per-obs implemented in
+  `RLAgentBrain`. v39 trained with random tier sampling (`runtimeHumanization=-1`
+  samples `{0, 0.33, 0.66, 1.0}` per episode). No dedicated fine-tune run needed —
+  v39 already conditions the policy on difficulty level. DifficultyShowcase (Pushman/8)
+  pins each arena to a tier and works correctly with v39 ONNX.
 - ✅ Phase 3.9 v3 — expanded observation space. Adds 10 obs dims (23→33) to fix
   push/block aim symptom. New obs: facing dot self→opp, opp facing dot, distance to opp,
   ring-out margin, charge progress, opp state one-hot. Trained from scratch, 20M steps
@@ -195,6 +228,129 @@ All showcase scenes (6, 7, 8) updated to use v39 ONNX.
     `ConfigureBehaviorParameters` to avoid Profile_A (33-dim) clobbering legacy obs sizes.
 - 🔄 Phase 4 — visual & gameplay polish. Task 4e ✅ done (state readability: enlarged
   hand sprites + state tints). 4a-4d (audio, effects, arena/HUD, feel) pending.
+
+---
+
+### Section 6 — WebGL Build: Main Menu & Character Select
+
+**Goal:** A playable WebGL build with a polished entry point. The player configures their
+match before loading the arena — choosing their own character, the opponent's personality,
+the opponent's difficulty, and the opponent's character. Then plays a best-of series before
+returning to the menu.
+
+---
+
+#### Scene structure
+
+```
+MainMenu (new scene)
+    └─ on Play → loads Game scene
+Game scene  (existing BotVsBot.unity, modified to read from GameConfig)
+    └─ on series end → returns to MainMenu
+```
+
+#### New systems
+
+**`GameConfig.cs`** — persistent singleton (`DontDestroyOnLoad`)
+Holds the player's selections across the scene load.
+```
+PlayerCharacter    : CharacterStats SO reference
+OpponentCharacter  : CharacterStats SO reference
+OpponentPersonality: BotPersonality SO reference
+OpponentDifficulty : float (0.0 = Expert … 1.0 = Easy)
+SeriesLength       : int (default 3 — first to 2 wins)
+```
+Reset to defaults on return to menu. Exposed as static `GameConfig.Current`.
+
+**`MainMenuController.cs`** — drives the menu scene
+- Populates card panels from arrays of SO references (set in Inspector)
+- Tracks current selection per category, updates card highlight states
+- Wires the Play button: validates all 4 selections made → `GameConfig.Current` → `SceneManager.LoadScene("Game")`
+
+**`SelectionCard.cs`** — reusable card component (one per option per category)
+- Shows: accent-colored border, name (Rajdhani Bold), short description (Inter)
+- States: unselected (dim border), selected (full accent color + scale pop)
+- `OnClick` notifies `MainMenuController`
+
+**`SeriesManager.cs`** — wraps `ArenaManager` for best-of-N flow
+- Tracks wins per side across rounds
+- Shows "Round X — First to Y wins" text during play
+- On series complete: shows result overlay (WIN / LOSE), Rematch button, Menu button
+- Rematch reloads Game scene with same `GameConfig`; Menu loads MainMenu
+
+---
+
+#### Menu layout (ContentKit dark theme)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  PUSHMAN                            [title, Rajdhani]   │
+├────────────────────┬────────────────────────────────────┤
+│   YOUR CHARACTER   │         OPPONENT                    │
+│                    │  Personality  Difficulty  Character │
+│  [Default ]        │  [Aggressive] [Expert   ] [Default] │
+│  [Heavyweight]     │  [Defensive ] [Hard     ] [Heavy  ] │
+│  [Speedster]       │  [Evasive   ] [Medium   ] [Speed  ] │
+│                    │  [Balanced  ] [Easy     ]            │
+│                    │  [Counter   ]                        │
+├────────────────────┴────────────────────────────────────┤
+│                  [ PLAY — BEST OF 3 ]                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+Cards use ContentKit accent colors:
+- Characters: Default=Steel, Heavyweight=Terra, Speedster=Sage
+- Personalities: Aggressive=Terra, Defensive=Steel, Evasive=Mauve, Balanced=Amber, Counter=Sage
+- Difficulty: Expert=red `#E84040`, Hard=orange `#E87830`, Medium=yellow `#E8C040`, Easy=Sage
+
+Short descriptions on each card (1 line):
+- **Default** — "Balanced stats"
+- **Heavyweight** — "Hard to push, hits hard"
+- **Speedster** — "Fast and light"
+- **Aggressive** — "Pushes relentlessly"
+- **Defensive** — "Blocks and waits"
+- **Evasive** — "Dodges everything"
+- **Balanced** — "No clear weakness"
+- **Counter** — "Punishes mistakes"
+- **Expert** → **Easy** — difficulty descriptions already in DifficultyShowcase
+
+---
+
+#### Game scene changes
+
+Modify `BotVsBot` scene setup (or add a `Pushman/12` builder) to:
+1. Read `GameConfig.Current` on scene load
+2. Set `player1` `CharacterStats` → `GameConfig.PlayerCharacter`
+3. Set `player2` `CharacterStats` → `GameConfig.OpponentCharacter`
+4. Set `player2` `RLAgentBrain.personality` → `GameConfig.OpponentPersonality`
+5. Set `player2` `RLAgentBrain.runtimeHumanization` → `GameConfig.OpponentDifficulty`
+6. Attach `SeriesManager` with `seriesLength = GameConfig.SeriesLength`
+
+Player 1 always uses `HumanBrain`. Player 2 always uses `RLAgentBrain` in `InferenceOnly` mode.
+
+---
+
+#### Implementation checklist
+
+**New files:**
+- [ ] `Assets/Scripts/GameConfig.cs` — persistent singleton
+- [ ] `Assets/Scripts/MainMenuController.cs` — menu logic
+- [ ] `Assets/Scripts/SelectionCard.cs` — card UI component
+- [ ] `Assets/Scripts/SeriesManager.cs` — best-of-N wrapper
+- [ ] `Assets/Scenes/MainMenu.unity` — menu scene (or `Pushman/12` builder for it)
+
+**Modified files:**
+- [ ] `Assets/Scripts/ArenaManager.cs` — expose a hook for `SeriesManager` to intercept round-end
+- [ ] `Assets/Editor/PushmanSetup.cs` — add `Pushman/12. Build Game Scene (WebGL)` that wires
+      `GameConfig` reading, `SeriesManager`, and sets Build Settings for WebGL export
+- [ ] `ProjectSettings/EditorBuildSettings.asset` — add MainMenu + Game scenes for WebGL build
+
+**WebGL build:**
+- [ ] File → Build Settings → WebGL platform
+- [ ] Player Settings: resolution 1280×720 (scales for browser), WebGL memory size
+- [ ] Build → `builds/WebGL/`
+- [ ] Test locally via `python -m http.server` in `builds/WebGL/`
+- [ ] Deploy to itch.io or GitHub Pages
 
 ---
 
@@ -328,42 +484,16 @@ Phase 3 v2 training:
       win-rate matrix asymmetries (up to 62%) are the real verification.
 - [ ] Verify human-vs-bot scene works at humanization=0 (clean obs only at this stage)
 
-*Phase 3.5 prep + training (after v2 validates):*
+*Phase 3.5 — COMPLETE (superseded by v39)*
 
-Profile_C implementation:
-- [x] Implement noise: Box-Muller Gaussian applied to opponent position (σ = humanization × 0.15)
-      and velocity (σ × 0.5) when `profile.applyNoise` is true
-- [x] Implement delay: per-opponent ring buffer (size 16) written every FixedUpdate;
-      `CollectObservations` reads `delayFrames` steps back via modular index
-- [x] Add `humanization` bool flag to `ObservationProfile` (default false — Profile_C.asset
-      keeps it OFF to preserve 23-dim obs space and allow warm-start from v2)
-- [x] `humanization` scalar obs code is implemented behind `ObserveHumanization` flag but
-      not activated — can be turned on in a later fine-tune if per-tier policy conditioning
-      is needed. Noise/delay alone create real difficulty tiers without it.
-- [x] `OnEpisodeBegin` samples from `{0, 0.33, 0.66, 1.0}` when `runtimeHumanization < 0`;
-      computes `_noiseSigma = h × 0.15` and `_delayFrames = floor(h × 12)`
-- [x] Add `runtimeHumanization` inspector field (≥0 pins tier; <0 randomises — default -1)
-- [x] Obs space stays 23 — warm-start from v2 checkpoint works via `init_path`
+All humanization code is implemented and live. v39 trained with random tier sampling,
+conditioning the policy on difficulty. DifficultyShowcase (Pushman/8) demonstrates all
+4 tiers working with v39 ONNX. No further training work needed for difficulty tiers.
 
-Phase 3.5 training:
-- [x] Write `TrainingConfigs/ppo_shared_v25.yaml`:
-      - `init_path: results/Pushman_Shared_v2/Pushman/Pushman-XXXXXX.pt`
-      - `max_steps: 5_000_000` (up from 2M — value loss needs more time to converge)
-      - `learning_rate: 1.0e-4` (lower than v2 to preserve learned strategies)
-      - `num_epoch: 5` (up from 3 — gives value function more gradient steps per batch
-        to catch up with policy; v2 value loss rose continuously 3→10 the entire run,
-        root cause is the value function chasing 5 simultaneous reward streams; more
-        epochs per batch lets it close the gap without increasing wall-clock time)
-- [ ] Rebuild round-robin scene (`Pushman/3e`) — now uses Profile_C (23 dims, same as v2); rebuild standalone
-- [ ] Train `Pushman_Shared_v25` (~3–4 h target at 8M warm-start steps)
-- [ ] Export ONNX → `Assets/MLModels/Pushman_Shared/PushmanAgent_v25.onnx`
-
-*Verification (after v2.5):*
-- [ ] Update showcase scene: 5 arenas, each pair runs the v2.5 ONNX with one of
-      {Expert, Hard, Medium, Easy} pinned per arena — visible humanization gradient
-- [ ] Verify human-vs-bot test scene at each of the 4 tiers; subjective feel check
-- [ ] Per-tier win-rate matrix: bot-vs-bot matches with both sides at the same tier;
-      should not collapse to one-sided wins at any tier (mirror matches ≈ 50/50)
+- [x] Noise/delay implemented in `RLAgentBrain` (Profile_C, ring buffer, Box-Muller)
+- [x] `runtimeHumanization` inspector field (≥0 pins tier, <0 randomises — default -1)
+- [x] v39 trained with random tier sampling across {0, 0.33, 0.66, 1.0}
+- [x] DifficultyShowcase scene (Pushman/8) built with 4 arenas, tiers pinned per arena
 
 ---
 

@@ -30,11 +30,24 @@ public class ArenaManager : MonoBehaviour
     [Tooltip("Seconds to freeze on a ring-out before resetting.")]
     public float ringOutPauseDuration = 0.6f;
 
+    [Header("Series")]
+    [Tooltip("If true the arena restarts automatically after each round. " +
+             "Set false by SeriesManager when the series is over.")]
+    public bool autoRestart = true;
+
+    /// <summary>
+    /// Fires at the start of the ring-out sequence (before the restart pause).
+    /// Argument: index into allPlayers for the winner, or -1 for tie / no winner.
+    /// SeriesManager subscribes to this to track series scores.
+    /// </summary>
+    public event System.Action<int> OnRoundEnd;
+
     private List<Player> activePlayers = new List<Player>();
     private float currentRingRadius;
     private float shrinkTimer;
     private bool matchRunning;
     private float matchStartTime;
+    private int   _pendingWinnerIndex = -1;
 
     // Boundary ring visual — updated each frame to match currentRingRadius.
     private SpriteRenderer boundaryRenderer;
@@ -147,6 +160,10 @@ public class ArenaManager : MonoBehaviour
 
         if (activePlayers.Count <= 1)
         {
+            _pendingWinnerIndex = activePlayers.Count == 1
+                ? allPlayers.IndexOf(activePlayers[0])
+                : -1;
+
             if (activePlayers.Count == 1)
             {
                 Player winner = activePlayers[0];
@@ -170,6 +187,10 @@ public class ArenaManager : MonoBehaviour
     {
         matchRunning = false;
 
+        // Notify listeners immediately (before the pause).
+        // SeriesManager sets autoRestart = false here if the series is over.
+        OnRoundEnd?.Invoke(_pendingWinnerIndex);
+
         // Flash boundary ring white.
         if (boundaryRenderer != null)
         {
@@ -185,6 +206,18 @@ public class ArenaManager : MonoBehaviour
         }
 
         EndAllEpisodes();
+        if (autoRestart) StartMatch();
+    }
+
+    /// <summary>
+    /// Resets series scores, re-enables auto-restart, and begins a new match.
+    /// Called by SeriesManager's Rematch button.
+    /// </summary>
+    public void StartNewSeries()
+    {
+        if (scores != null)
+            for (int i = 0; i < scores.Length; i++) scores[i] = 0;
+        autoRestart = true;
         StartMatch();
     }
 
