@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/MainMenu.unity
+    guid: ea0446be0db4f4d4e9e52fed6474d33f
+  - enabled: 1
     path: Assets/Scenes/ML_Training_RoundRobin.unity
     guid: fc1fda4bf8f054e3a861ec3acc7061d5
   - enabled: 0
@@ -38,6 +41,9 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/LegacyShowcase.unity
     guid: 9d72eb390ecdc4f0793fd4ca124199aa
+  - enabled: 1
+    path: Assets/Scenes/Game.unity
+    guid: d5598f6257788444e84e8cc69d163905
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

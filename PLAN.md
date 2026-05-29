@@ -41,9 +41,23 @@ Mauve/Terra player bodies). `ContentKitCamera` component guarantees Play-mode ba
 ### Diagrams: ✅ SVGs in `Diagrams/`
 `combat-triangle.svg` (RPS mechanic) and `state-machine.svg` (6-state flow), ContentKit dark theme.
 
+### Main Menu + Series Flow: ✅ Built and working
+Full menu → game → series → rematch loop is live:
+- `MainMenu.unity` — card-based selection (player char / personality / difficulty / opponent char) + PLAY
+- `Game.unity` — Human P1 vs v39 bot with selected settings; ContentKit visuals, HUD, ring
+- Best-of-3 series via `SeriesManager`; per-round banner + end-game Rematch/Menu overlay
+- `GameConfig` singleton survives scene loads (DontDestroyOnLoad)
+
+**Key gotchas resolved during build:**
+- ONNX must be loaded **after** `EditorSceneManager.NewScene` (otherwise `UnloadUnusedAssets` nulls the reference)
+- New scenes need explicit `InputSystemUIInputModule` (project uses new Input System; `StandaloneInputModule` crashes at runtime)
+- TMP fonts must be assigned via SerializedObject in Pushman/12a (Inspector field stays null otherwise)
+- All `VerticalLayoutGroup`s need `childControlHeight = true` to respect `LayoutElement.preferredHeight`
+- `Pushman/12a` and `Pushman/12b` regenerate scenes from scratch — re-run after changes
+
 ### Next up
-1. **WebGL build + release prep** — build for itch.io / GitHub Pages
-2. **Phase 4 polish** (4a–4d): audio, hit effects, charge indicator, arena feel
+1. **WebGL build + release prep** — build target switch, test in browser, publish to itch.io / GitHub Pages
+2. **Phase 4 polish** (4a–4d): audio (SFX), hit effects, charge indicator, arena feel
 3. **Human playtesting** — validate push-on-release feel, stamina costs, shrink timer
 
 > ⚠️ Build hygiene: always verify `[RLAgentBrain] obs=33` in `results/<run>/run_logs/Player-0.log`

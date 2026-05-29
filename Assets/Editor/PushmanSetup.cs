@@ -7,6 +7,7 @@ using System.Reflection;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Policies;
+using Unity.InferenceEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
@@ -1383,16 +1384,29 @@ public static class PushmanSetup
         // but legacy models need 13 or 18 dims depending on when they were trained.
         bp.BrainParameters.VectorObservationSize = profile != null ? profile.ComputeSpaceSize(1) : OBS_SIZE;
 
-        // Assign ONNX model via SerializedObject to avoid hard Barracuda/Sentis type dependency
+        // Assign ONNX model. ModelAsset comes from Unity.InferenceEngine (Unity 6's renamed Sentis).
+        // The public Model setter handles UpdateAgentPolicy() correctly; SerializedObject fallback
+        // covers older ML-Agents versions that may not have exposed the property.
         if (onnxModel != null)
         {
-            var so = new SerializedObject(bp);
-            var modelProp = so.FindProperty("m_Model");
-            if (modelProp != null)
+            var modelAsset = onnxModel as ModelAsset;
+            if (modelAsset != null)
             {
-                modelProp.objectReferenceValue = onnxModel;
-                so.ApplyModifiedProperties();
+                bp.Model = modelAsset;
             }
+            else
+            {
+                var so = new SerializedObject(bp);
+                var modelProp = so.FindProperty("m_Model");
+                if (modelProp != null)
+                {
+                    modelProp.objectReferenceValue = onnxModel;
+                    so.ApplyModifiedProperties();
+                }
+            }
+            if (bp.Model == null)
+                Debug.LogError($"[BuildBotPlayer] Failed to wire model onto {playerName}.");
+            EditorUtility.SetDirty(bp);
         }
 
         var dr = go.AddComponent<DecisionRequester>();
@@ -2733,6 +2747,411 @@ public static class PushmanSetup
         AssetDatabase.SaveAssets();
         return so;
     }
+
+    // -----------------------------------------------------------------------
+    // 12a. Build Main Menu Scene
+    //      Creates Assets/Scenes/MainMenu.unity with a Canvas + MainMenuController
+    //      wired to all CharacterStats and BotPersonality SOs.
+    //      Run Pushman/10 afterwards if you want ContentKit bg on the camera.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/12a. Build Main Menu Scene")]
+    public static void BuildMainMenuScene()
+    {
+        EnsureFolders();
+
+        // Load or create the SOs we need for card data
+        var defaultStats   = CreateOrLoad<CharacterStats>("Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        var heavyStats     = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Heavyweight.asset");
+        var speedsterStats = AssetDatabase.LoadAssetAtPath<CharacterStats>("Assets/ScriptableObjects/Characters/Speedster.asset");
+
+        var aggressive  = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        var defensive   = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Defensive.asset");
+        var evasive     = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Evasive.asset");
+        var balanced    = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Balanced.asset");
+        var counter     = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Counter.asset");
+
+        // Create a fresh scene
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+        // Camera — ContentKit Void background
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            cam.clearFlags      = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.067f, 0.063f, 0.035f);
+            if (cam.gameObject.GetComponent<ContentKitCamera>() == null)
+                cam.gameObject.AddComponent<ContentKitCamera>();
+            EditorUtility.SetDirty(cam.gameObject);
+        }
+
+        // EventSystem — use InputSystemUIInputModule (new Input System) if available;
+        // fall back to StandaloneInputModule only when the package isn't installed.
+        if (Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+        {
+            var esGO = new GameObject("EventSystem");
+            esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            var newInputModuleType = System.Type.GetType(
+                "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
+            if (newInputModuleType != null)
+                esGO.AddComponent(newInputModuleType);
+            else
+                esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        }
+
+        // Canvas + MainMenuController
+        var canvasGO = new GameObject("MainMenu");
+        var canvas   = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode   = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 5;
+        var scaler  = canvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
+        scaler.uiScaleMode         = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight  = 0.5f;
+        canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+        // Resolve MainMenuController type at runtime to avoid hard editor dependency
+        System.Type mmcType = null;
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try { mmcType = asm.GetType("MainMenuController"); } catch { }
+            if (mmcType != null) break;
+        }
+
+        if (mmcType == null)
+        {
+            Debug.LogWarning("[PushmanSetup] MainMenuController type not found — save the scene and recompile first.");
+            EditorSceneManager.SaveScene(scene, "Assets/Scenes/MainMenu.unity");
+            return;
+        }
+
+        var mmc = canvasGO.AddComponent(mmcType);
+        var so  = new SerializedObject(mmc);
+
+        // ContentKit accent colours
+        var kAmber = new Color(0.910f, 0.753f, 0.408f);
+        var kMauve = new Color(0.722f, 0.596f, 0.800f);
+        var kSteel = new Color(0.604f, 0.667f, 0.733f);
+        var kTerra = new Color(0.863f, 0.596f, 0.471f);
+
+        // Helper: write a CardDef array into a SerializedProperty
+        void WriteCards(string propName, (string label, string desc, Color accent, Object data, float fval)[] defs)
+        {
+            var arr = so.FindProperty(propName);
+            if (arr == null) { Debug.LogWarning($"[PushmanSetup] Property '{propName}' not found on MainMenuController."); return; }
+            arr.arraySize = defs.Length;
+            for (int i = 0; i < defs.Length; i++)
+            {
+                var el   = arr.GetArrayElementAtIndex(i);
+                el.FindPropertyRelative("label"      ).stringValue          = defs[i].label;
+                el.FindPropertyRelative("description").stringValue          = defs[i].desc;
+                el.FindPropertyRelative("accentColor").colorValue           = defs[i].accent;
+                el.FindPropertyRelative("data"       ).objectReferenceValue = defs[i].data;
+                el.FindPropertyRelative("floatValue" ).floatValue           = defs[i].fval;
+            }
+        }
+
+        // Player character cards (Amber)
+        WriteCards("playerCharCards", new[] {
+            ("DEFAULT",     "Balanced stats",            kAmber, (Object)defaultStats,   0f),
+            ("HEAVYWEIGHT", "Slow but hits like a truck",kAmber, (Object)heavyStats,     0f),
+            ("SPEEDSTER",   "Light and fast",            kAmber, (Object)speedsterStats, 0f),
+        });
+
+        // Personality cards (Mauve)
+        WriteCards("personalityCards", new[] {
+            ("AGGRESSIVE", "Push first, push hard",        kMauve, (Object)aggressive, 0f),
+            ("DEFENSIVE",  "Block and punish",             kMauve, (Object)defensive,  0f),
+            ("EVASIVE",    "Dodge everything",             kMauve, (Object)evasive,    0f),
+            ("BALANCED",   "Adapts to the situation",      kMauve, (Object)balanced,   0f),
+            ("COUNTER",    "Reads and punishes patterns",  kMauve, (Object)counter,    0f),
+        });
+
+        // Difficulty cards (Steel) — floatValue = runtimeHumanization (0=Expert, 1=Easy)
+        WriteCards("difficultyCards", new[] {
+            ("EXPERT", "No mercy",               kSteel, (Object)null, 0.00f),
+            ("HARD",   "Tough but beatable",     kSteel, (Object)null, 0.33f),
+            ("MEDIUM", "Fair challenge",         kSteel, (Object)null, 0.66f),
+            ("EASY",   "Learning the ropes",    kSteel, (Object)null, 1.00f),
+        });
+
+        // Opponent character cards (Terra)
+        WriteCards("opponentCharCards", new[] {
+            ("DEFAULT",     "Balanced stats",            kTerra, (Object)defaultStats,   0f),
+            ("HEAVYWEIGHT", "Slow but hits like a truck",kTerra, (Object)heavyStats,     0f),
+            ("SPEEDSTER",   "Light and fast",            kTerra, (Object)speedsterStats, 0f),
+        });
+
+        // Wire scene name
+        var sceneNameProp = so.FindProperty("gameSceneName");
+        if (sceneNameProp != null) sceneNameProp.stringValue = "Game";
+
+        // Wire TMP font — search for LiberationSans SDF (TMP's default built-in font)
+        TMP_FontAsset defaultTMPFont = null;
+        foreach (var guid in AssetDatabase.FindAssets("t:TMP_FontAsset"))
+        {
+            var fp = AssetDatabase.GUIDToAssetPath(guid);
+            if (fp.Contains("LiberationSans SDF"))
+            {
+                defaultTMPFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(fp);
+                if (defaultTMPFont != null) break;
+            }
+        }
+        // Fall back to any TMP_FontAsset if LiberationSans isn't found
+        if (defaultTMPFont == null)
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:TMP_FontAsset"))
+            {
+                defaultTMPFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+                    AssetDatabase.GUIDToAssetPath(guid));
+                if (defaultTMPFont != null) break;
+            }
+        }
+        if (defaultTMPFont != null)
+        {
+            var fontTitleProp = so.FindProperty("fontTitle");
+            var fontBodyProp  = so.FindProperty("fontBody");
+            if (fontTitleProp != null) fontTitleProp.objectReferenceValue = defaultTMPFont;
+            if (fontBodyProp  != null) fontBodyProp.objectReferenceValue  = defaultTMPFont;
+            Debug.Log($"[PushmanSetup] TMP font wired: {defaultTMPFont.name}");
+        }
+        else
+        {
+            Debug.LogWarning("[PushmanSetup] No TMP_FontAsset found — import TextMeshPro Essentials " +
+                             "via Window > TextMeshPro > Import TMP Essential Resources, then re-run 12a.");
+        }
+
+        so.ApplyModifiedProperties();
+        EditorUtility.SetDirty(canvasGO);
+
+        // Save and register
+        const string MAIN_MENU_PATH = "Assets/Scenes/MainMenu.unity";
+        EditorSceneManager.SaveScene(scene, MAIN_MENU_PATH);
+
+        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!scenes.Exists(s => s.path == MAIN_MENU_PATH))
+            scenes.Insert(0, new EditorBuildSettingsScene(MAIN_MENU_PATH, true));
+        EditorBuildSettings.scenes = scenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log("[PushmanSetup] Main Menu scene saved → Assets/Scenes/MainMenu.unity. " +
+                  "Run Pushman/10 to apply ContentKit background.");
+    }
+
+    // -----------------------------------------------------------------------
+    // 12b. Build Game Scene (Human vs Bot)
+    //      Creates Assets/Scenes/Game.unity — Human P1 vs v39 RLAgentBrain P2.
+    //      GameSceneController reads GameConfig at runtime to apply menu selections.
+    //      SeriesManager tracks wins and shows series-end overlay.
+    // -----------------------------------------------------------------------
+
+    [MenuItem("Pushman/12b. Build Game Scene (Human vs Bot)")]
+    public static void BuildGameScene()
+    {
+        const string GAME_SCENE_PATH  = "Assets/Scenes/Game.unity";
+        const string MODELS_FOLDER    = "Assets/MLModels";
+        const string DEFAULT_ONNX     = MODELS_FOLDER + "/Pushman_Shared/PushmanAgent_v39.onnx";
+
+        EnsureFolders();
+
+        // Load SOs
+        var stats    = CreateOrLoad<CharacterStats>("Assets/ScriptableObjects/Characters/DefaultStats.asset");
+        InitCharacterStats(stats);
+        var profileA    = CreateOrLoad<ObservationProfile>("Assets/ScriptableObjects/Observation/Profile_A.asset");
+        var personality = AssetDatabase.LoadAssetAtPath<BotPersonality>("Assets/ScriptableObjects/Personalities/Aggressive.asset")
+                       ?? CreateOrLoad<BotPersonality>("Assets/ScriptableObjects/Personalities/Aggressive.asset");
+        AssetDatabase.SaveAssets();
+
+        // Resolve ONNX — prefer v39, fall back to newest
+        string onnxPath = DEFAULT_ONNX;
+        var allOnnx = AssetDatabase.FindAssets("t:Object", new[] { MODELS_FOLDER });
+        string newestPath = null; System.DateTime newestTime = System.DateTime.MinValue;
+        foreach (var guid in allOnnx)
+        {
+            string p = AssetDatabase.GUIDToAssetPath(guid);
+            if (!p.EndsWith(".onnx")) continue;
+            System.DateTime t = File.GetLastWriteTime(p);
+            if (t > newestTime) { newestTime = t; newestPath = p; }
+        }
+        if (!File.Exists(onnxPath) && newestPath != null) onnxPath = newestPath;
+
+        // New scene FIRST — EditorSceneManager.NewScene triggers UnloadUnusedAssets which
+        // would null out any asset reference we held before this point.
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+
+        // Now load the model — the reference will survive until BuildBotPlayer.
+        var model = AssetDatabase.LoadAssetAtPath<ModelAsset>(onnxPath);
+        if (model == null) model = AssetDatabase.LoadMainAssetAtPath(onnxPath) as ModelAsset;
+        if (model == null)
+            Debug.LogError($"[PushmanSetup] Failed to load model at {onnxPath} after scene creation.");
+        else
+            Debug.Log($"[PushmanSetup] Game scene using model: {model.name} ({model.GetType().Name})");
+
+        // EventSystem — must use InputSystemUIInputModule (new Input System project)
+        if (Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+        {
+            var esGO = new GameObject("EventSystem");
+            esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            var newInputModuleType = System.Type.GetType(
+                "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
+            if (newInputModuleType != null)
+                esGO.AddComponent(newInputModuleType);
+            else
+                esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        }
+
+        int playerLayer = GetOrAddLayer("Player");
+
+        // Arena
+        var arena  = new GameObject("Arena");
+        var center = CreateChild("ArenaCenter", arena);
+        center.transform.localPosition = Vector3.zero;
+
+        var spawnPositions = new Vector3[] {
+            new Vector3(-4f,  0f, 0f),
+            new Vector3( 4f,  0f, 0f),
+            new Vector3( 0f,  4f, 0f),
+            new Vector3( 0f, -4f, 0f),
+        };
+        var spawnGOs = new List<GameObject>();
+        for (int i = 0; i < spawnPositions.Length; i++)
+        {
+            var sp = CreateChild($"SpawnPoint_{i + 1}", arena);
+            sp.transform.localPosition = spawnPositions[i];
+            spawnGOs.Add(sp);
+        }
+
+        // Player 1 — HumanBrain
+        var p1GO = BuildPlayerGO("Player1", stats, playerLayer, arena);
+        p1GO.transform.localPosition = spawnPositions[0];
+        p1GO.AddComponent<HumanBrain>();
+        var p1 = p1GO.GetComponent<Player>();
+
+        // Player 2 — RLAgentBrain (InferenceOnly, v39)
+        var p2GO = BuildBotPlayer("Player2", stats, playerLayer, arena,
+                                  spawnPositions[1], profileA, personality, model);
+        var p2 = p2GO.GetComponent<Player>();
+        // Default to Hard difficulty (0.33 humanization)
+        var p2rl = p2GO.GetComponent<RLAgentBrain>();
+        if (p2rl != null) p2rl.runtimeHumanization = 0.33f;
+
+        // Verify the model actually got wired onto BehaviorParameters.
+        // BuildBotPlayer uses SerializedObject "m_Model"; if Sentis renamed it, this catches it.
+        var p2bp = p2GO.GetComponent<BehaviorParameters>();
+        if (p2bp != null)
+        {
+            if (p2bp.Model != null)
+                Debug.Log($"[PushmanSetup] ✓ Bot model wired: {p2bp.Model.name}");
+            else
+            {
+                Debug.LogError($"[PushmanSetup] ✗ Bot model FAILED to wire (BehaviorParameters.Model is null). " +
+                               $"Falling back to HeuristicOnly so the scene doesn't crash at runtime.");
+                p2bp.BehaviorType = BehaviorType.HeuristicOnly;
+            }
+        }
+
+        int oppMask = 1 << playerLayer;
+        p1.opponentLayer = oppMask;
+        p2.opponentLayer = oppMask;
+
+        // ArenaManager — autoRestart starts true; SeriesManager will set it false at series end
+        var am = arena.AddComponent<ArenaManager>();
+        am.arenaCenter   = center.transform;
+        am.ringOutRadius = 10f;
+        am.allPlayers    = new List<Player> { p1, p2 };
+        am.spawnPoints   = new List<Transform>();
+        foreach (var sp in spawnGOs) am.spawnPoints.Add(sp.transform);
+        am.autoRestart   = true;
+
+        // Wire RL brain
+        if (p2rl != null)
+        {
+            p2rl.arenaManager = am;
+            p2rl.opponents    = new Player[] { p1 };
+        }
+
+        // Camera
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            cam.orthographic     = true;
+            cam.orthographicSize = 12f;
+            cam.clearFlags       = CameraClearFlags.SolidColor;
+            cam.backgroundColor  = new Color(0.067f, 0.063f, 0.035f);
+            cam.transform.position = new Vector3(0f, 0f, -10f);
+            if (cam.gameObject.GetComponent<ContentKitCamera>() == null)
+                cam.gameObject.AddComponent<ContentKitCamera>();
+            EditorUtility.SetDirty(cam.gameObject);
+        }
+
+        // Sprites + HUD + arena boundary ring (all idempotent)
+        AddSpritesToPlayers();
+
+        // GameSceneController
+        System.Type gscType = null;
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try { gscType = asm.GetType("GameSceneController"); } catch { }
+            if (gscType != null) break;
+        }
+        if (gscType != null)
+        {
+            var gscGO = new GameObject("GameSceneController");
+            var gsc   = gscGO.AddComponent(gscType);
+            var gscSO = new SerializedObject(gsc);
+            var p1Prop = gscSO.FindProperty("player1");
+            var p2Prop = gscSO.FindProperty("player2");
+            if (p1Prop != null) p1Prop.objectReferenceValue = p1;
+            if (p2Prop != null) p2Prop.objectReferenceValue = p2;
+            gscSO.ApplyModifiedProperties();
+            EditorUtility.SetDirty(gscGO);
+        }
+        else
+        {
+            Debug.LogWarning("[PushmanSetup] GameSceneController type not found — recompile first.");
+        }
+
+        // SeriesManager
+        System.Type smType = null;
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try { smType = asm.GetType("SeriesManager"); } catch { }
+            if (smType != null) break;
+        }
+        if (smType != null)
+        {
+            var smGO = new GameObject("SeriesManager");
+            var sm   = smGO.AddComponent(smType);
+            var smSO = new SerializedObject(sm);
+            var amProp = smSO.FindProperty("arenaManager");
+            if (amProp != null) amProp.objectReferenceValue = am;
+            var mnProp = smSO.FindProperty("mainMenuSceneName");
+            if (mnProp != null) mnProp.stringValue = "MainMenu";
+            smSO.ApplyModifiedProperties();
+            EditorUtility.SetDirty(smGO);
+        }
+        else
+        {
+            Debug.LogWarning("[PushmanSetup] SeriesManager type not found — recompile first.");
+        }
+
+        EditorUtility.SetDirty(am);
+        EditorUtility.SetDirty(p1);
+        EditorUtility.SetDirty(p2);
+
+        // Save + register
+        EditorSceneManager.SaveScene(scene, GAME_SCENE_PATH);
+        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+        if (!scenes.Exists(s => s.path == GAME_SCENE_PATH))
+            scenes.Add(new EditorBuildSettingsScene(GAME_SCENE_PATH, true));
+        EditorBuildSettings.scenes = scenes.ToArray();
+
+        AssetDatabase.Refresh();
+        Debug.Log("[PushmanSetup] Game scene saved → Assets/Scenes/Game.unity. " +
+                  "Run Pushman/10 to apply ContentKit bg and post-processing.");
+    }
+
+    // -----------------------------------------------------------------------
 
     private static void InitCharacterStats(CharacterStats stats)
     {
