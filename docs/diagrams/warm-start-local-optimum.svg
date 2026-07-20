@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <rect width="1100" height="560" fill="#111009"/>
+
+  <text x="550" y="42" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="20" font-weight="bold" fill="#E8E4D8" letter-spacing="4">FAILING FORWARD</text>
+  <text x="550" y="64" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#6A6358">keep the weights, raise the learning rate, let the policy explore again — you don't always start over</text>
+
+  <!-- axes hints -->
+  <text x="92" y="300" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10"
+        fill="#6A6358" transform="rotate(-90 92 300)" letter-spacing="2">COST  (lower = better policy)</text>
+  <text x="550" y="500" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10" fill="#6A6358" letter-spacing="2">POLICY SPACE</text>
+  <line x1="120" y1="470" x2="990" y2="470" stroke="#3A3830" stroke-width="0.8"/>
+
+  <!-- landscape -->
+  <path d="M110,230 C 200,360 300,380 380,362 C 470,344 505,210 560,200 C 620,210 690,420 775,432 C 855,440 930,384 990,338"
+        fill="none" stroke="#3D3A30" stroke-width="2.5"/>
+
+  <!-- valley labels -->
+  <text x="380" y="404" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#9A7AB0">local optimum</text>
+  <text x="380" y="420" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10" fill="#6A6358">(dodge-spam)</text>
+  <text x="775" y="462" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#7D9A6A">better policy</text>
+
+  <!-- warm-start trajectory -->
+  <defs>
+    <marker id="wa" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#E8C068"/>
+    </marker>
+    <marker id="wg" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#6A6358"/>
+    </marker>
+  </defs>
+  <path d="M388,356 C 450,300 510,250 560,236 C 630,250 700,406 762,424"
+        fill="none" stroke="#E8C068" stroke-width="2.2" stroke-dasharray="6,4" marker-end="url(#wa)"/>
+  <circle cx="380" cy="362" r="9" fill="#E8C068"/>
+  <text x="318" y="338" text-anchor="end" font-family="'Segoe UI',Arial,sans-serif" font-size="12" font-weight="bold" fill="#E8C068">warm-start</text>
+  <text x="318" y="356" text-anchor="end" font-family="'Segoe UI',Arial,sans-serif" font-size="10.5" fill="#9A9484">keep weights + raise LR</text>
+
+  <!-- from scratch -->
+  <circle cx="150" cy="232" r="8" fill="#6A6358"/>
+  <path d="M158,242 C 210,330 270,372 360,372" fill="none" stroke="#6A6358" stroke-width="1.6" stroke-dasharray="3,3" marker-end="url(#wg)"/>
+  <text x="150" y="212" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#9A9484">fresh start</text>
+  <text x="150" y="198" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10" fill="#6A6358">(from random)</text>
+
+  <!-- takeaway -->
+  <text x="550" y="528" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="13" font-weight="bold" fill="#EDE8DC">
+    you start from a local optimum, not a blank page — old habits take a while to wash out, but it's usually enough</text>
+</svg>

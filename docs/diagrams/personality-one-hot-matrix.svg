@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520">
+  <rect width="1100" height="520" fill="#111009"/>
+
+  <text x="550" y="42" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="20" font-weight="bold" fill="#E8E4D8" letter-spacing="4">ONE NETWORK, FIVE OPPONENTS</text>
+  <text x="550" y="64" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#6A6358">personality is just a one-hot input — pick the row at deploy time, no retraining</text>
+
+  <!-- grid: 5 rows x 5 cols, cell 56, origin (330,120) -->
+  <!-- column header -->
+  <text x="555" y="108" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#6A6358" letter-spacing="2">ONE-HOT IDENTITY  (5 slots)</text>
+
+  <g font-family="'Segoe UI',Arial,sans-serif">
+    <!-- row labels + cells -->
+    <!-- AGGRESSIVE  #C49A3C -->
+    <text x="312" y="156" text-anchor="end" font-size="13" font-weight="bold" fill="#C49A3C">AGGRESSIVE</text>
+    <rect x="330" y="132" width="48" height="48" rx="4" fill="#C49A3C"/><text x="354" y="162" text-anchor="middle" font-size="14" font-weight="bold" fill="#111009">1</text>
+    <rect x="386" y="132" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="410" y="162" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="442" y="132" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="466" y="162" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="498" y="132" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="522" y="162" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="554" y="132" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="578" y="162" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+
+    <!-- DEFENSIVE  #6B7A8D -->
+    <text x="312" y="212" text-anchor="end" font-size="13" font-weight="bold" fill="#6B7A8D">DEFENSIVE</text>
+    <rect x="330" y="188" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="354" y="218" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="386" y="188" width="48" height="48" rx="4" fill="#6B7A8D"/><text x="410" y="218" text-anchor="middle" font-size="14" font-weight="bold" fill="#111009">1</text>
+    <rect x="442" y="188" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="466" y="218" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="498" y="188" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="522" y="218" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="554" y="188" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="578" y="218" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+
+    <!-- EVASIVE  #9A7AB0 -->
+    <text x="312" y="268" text-anchor="end" font-size="13" font-weight="bold" fill="#9A7AB0">EVASIVE</text>
+    <rect x="330" y="244" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="354" y="274" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="386" y="244" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="410" y="274" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="442" y="244" width="48" height="48" rx="4" fill="#9A7AB0"/><text x="466" y="274" text-anchor="middle" font-size="14" font-weight="bold" fill="#111009">1</text>
+    <rect x="498" y="244" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="522" y="274" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="554" y="244" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="578" y="274" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+
+    <!-- BALANCED  #7D9A6A -->
+    <text x="312" y="324" text-anchor="end" font-size="13" font-weight="bold" fill="#7D9A6A">BALANCED</text>
+    <rect x="330" y="300" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="354" y="330" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="386" y="300" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="410" y="330" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="442" y="300" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="466" y="330" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="498" y="300" width="48" height="48" rx="4" fill="#7D9A6A"/><text x="522" y="330" text-anchor="middle" font-size="14" font-weight="bold" fill="#111009">1</text>
+    <rect x="554" y="300" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="578" y="330" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+
+    <!-- COUNTER  #C47A5A -->
+    <text x="312" y="380" text-anchor="end" font-size="13" font-weight="bold" fill="#C47A5A">COUNTER</text>
+    <rect x="330" y="356" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="354" y="386" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="386" y="356" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="410" y="386" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="442" y="356" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="466" y="386" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="498" y="356" width="48" height="48" rx="4" fill="#1E1C16" stroke="#2C2A22"/><text x="522" y="386" text-anchor="middle" font-size="13" fill="#4A463C">0</text>
+    <rect x="554" y="356" width="48" height="48" rx="4" fill="#C47A5A"/><text x="578" y="386" text-anchor="middle" font-size="14" font-weight="bold" fill="#111009">1</text>
+  </g>
+
+  <!-- arrow to shared network -->
+  <defs>
+    <marker id="pa" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#9A9484"/>
+    </marker>
+  </defs>
+  <line x1="618" y1="268" x2="712" y2="268" stroke="#9A9484" stroke-width="2" marker-end="url(#pa)"/>
+
+  <rect x="724" y="222" width="190" height="92" rx="8" fill="#1E1C16" stroke="#3D3A30" stroke-width="1.2"/>
+  <text x="819" y="258" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="13" font-weight="bold" fill="#EDE8DC">SHARED</text>
+  <text x="819" y="278" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="13" font-weight="bold" fill="#EDE8DC">NETWORK</text>
+  <text x="819" y="300" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10.5" fill="#9A9484">one policy, all five</text>
+
+  <text x="550" y="452" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="13" font-weight="bold" fill="#7D9A6A">
+    swap the row → swap the bot you fight, live — and the same input dials difficulty</text>
+  <text x="550" y="476" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="10.5" fill="#6A6358">
+    opponent identity is deliberately NOT an input — the bot reads behaviour, so it works against humans too</text>
+</svg>

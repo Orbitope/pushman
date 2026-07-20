@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="580" viewBox="0 0 980 580" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="arr-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#E8C068"/></marker>
+    <marker id="arr-sage"  markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7D9A6A"/></marker>
+    <marker id="arr-mauve" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#9A7AB0"/></marker>
+    <marker id="arr-terra" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#C47A5A"/></marker>
+    <marker id="arr-muted" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6A6358"/></marker>
+  </defs>
+
+  <rect width="980" height="580" fill="#111009"/>
+  <text x="490" y="42" text-anchor="middle" font-size="22" font-weight="bold" fill="#EDE8DC" letter-spacing="2">PLAYER STATE MACHINE</text>
+
+  <!-- legend -->
+  <line x1="300" y1="64" x2="340" y2="64" stroke="#9AAABB" stroke-width="2.5"/><polygon points="338,61 346,64 338,67" fill="#9AAABB"/>
+  <text x="352" y="68" font-size="11" fill="#6A6358">action transition</text>
+  <line x1="480" y1="64" x2="520" y2="64" stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4"/><polygon points="518,61 526,64 518,67" fill="#6A6358"/>
+  <text x="532" y="68" font-size="11" fill="#6A6358">return to idle</text>
+
+  <!-- ===== arrows (before nodes) ===== -->
+  <line x1="408" y1="279" x2="562" y2="164" stroke="#E8C068" stroke-width="2.5" marker-end="url(#arr-amber)"/>
+  <text x="478" y="208" text-anchor="middle" font-size="11" fill="#E8C068" opacity="0.9">hold push</text>
+
+  <line x1="408" y1="301" x2="562" y2="416" stroke="#7D9A6A" stroke-width="2.5" marker-end="url(#arr-sage)"/>
+  <text x="478" y="372" text-anchor="middle" font-size="11" fill="#7D9A6A" opacity="0.9">hold block</text>
+
+  <line x1="258" y1="282" x2="178" y2="282" stroke="#9A7AB0" stroke-width="2.5" marker-end="url(#arr-mauve)"/>
+  <text x="218" y="272" text-anchor="middle" font-size="11" fill="#9A7AB0" opacity="0.9">dodge</text>
+
+  <line x1="658" y1="144" x2="748" y2="272" stroke="#C47A5A" stroke-width="2.5" marker-end="url(#arr-terra)"/>
+  <text x="726" y="200" text-anchor="middle" font-size="11" fill="#C47A5A" opacity="0.9">release</text>
+
+  <line x1="812" y1="318" x2="408" y2="472" stroke="#6A6358" stroke-width="2.5" marker-end="url(#arr-muted)"/>
+  <text x="650" y="402" text-anchor="middle" font-size="11" fill="#6A6358" opacity="0.9">0.2s recovery</text>
+
+  <line x1="178" y1="298" x2="258" y2="298" stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arr-muted)"/>
+  <text x="218" y="316" text-anchor="middle" font-size="11" fill="#6A6358" opacity="0.75">on land / hit</text>
+
+  <path d="M 562,416 Q 452,348 410,304" stroke="#6A6358" stroke-width="2" fill="none" stroke-dasharray="5,4" marker-end="url(#arr-muted)"/>
+  <text x="470" y="344" text-anchor="middle" font-size="11" fill="#6A6358" opacity="0.75">release</text>
+
+  <line x1="333" y1="456" x2="333" y2="318" stroke="#6A6358" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arr-muted)"/>
+  <text x="392" y="390" text-anchor="middle" font-size="11" fill="#6A6358" opacity="0.75">after duration</text>
+
+  <!-- ===== nodes (150×50 rounded) ===== -->
+  <rect x="28"  y="265" width="150" height="50" rx="25" fill="#1a1812" stroke="#9A7AB0" stroke-width="2.5"/>
+  <text x="103" y="289" text-anchor="middle" font-size="15" font-weight="bold" fill="#9A7AB0">DODGING</text>
+  <text x="103" y="305" text-anchor="middle" font-size="10" fill="#6A6358">dashing</text>
+
+  <rect x="258" y="265" width="150" height="50" rx="25" fill="#1a1812" stroke="#6B7A8D" stroke-width="2.5"/>
+  <text x="333" y="289" text-anchor="middle" font-size="15" font-weight="bold" fill="#9AAABB">MOVING</text>
+  <text x="333" y="305" text-anchor="middle" font-size="10" fill="#6A6358">default / idle</text>
+
+  <rect x="508" y="115" width="150" height="50" rx="25" fill="#1a1812" stroke="#C49A3C" stroke-width="2.5"/>
+  <text x="583" y="139" text-anchor="middle" font-size="15" font-weight="bold" fill="#E8C068">CHARGING</text>
+  <text x="583" y="155" text-anchor="middle" font-size="10" fill="#6A6358">building push force</text>
+
+  <rect x="758" y="265" width="150" height="50" rx="25" fill="#1a1812" stroke="#C47A5A" stroke-width="2.5"/>
+  <text x="833" y="289" text-anchor="middle" font-size="15" font-weight="bold" fill="#C47A5A">PUSHING</text>
+  <text x="833" y="305" text-anchor="middle" font-size="10" fill="#6A6358">push executing</text>
+
+  <rect x="508" y="415" width="150" height="50" rx="25" fill="#1a1812" stroke="#7D9A6A" stroke-width="2.5"/>
+  <text x="583" y="439" text-anchor="middle" font-size="15" font-weight="bold" fill="#9DBE8A">BLOCKING</text>
+  <text x="583" y="455" text-anchor="middle" font-size="10" fill="#6A6358">shielding</text>
+
+  <rect x="258" y="455" width="150" height="50" rx="25" fill="#1a1812" stroke="#6A6358" stroke-width="2"/>
+  <text x="333" y="479" text-anchor="middle" font-size="15" font-weight="bold" fill="#9A9484">STUNNED</text>
+  <text x="333" y="495" text-anchor="middle" font-size="10" fill="#4A4840">temporary stagger</text>
+
+  <text x="490" y="560" text-anchor="middle" font-size="11" fill="#4A4840">* taking a hit from any state immediately transitions to Stunned</text>
+</svg>

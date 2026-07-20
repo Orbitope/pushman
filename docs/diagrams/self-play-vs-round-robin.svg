@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <defs>
+    <marker id="arr-muted" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#6A6358"/>
+    </marker>
+    <marker id="arr-muted-small" markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 7 3, 0 6" fill="#6A6358"/>
+    </marker>
+    <marker id="arr-amber" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#E8C068"/>
+    </marker>
+    <marker id="arr-steel" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#9AAABB"/>
+    </marker>
+    <marker id="arr-mauve" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#B898CC"/>
+    </marker>
+    <marker id="arr-sage"  markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#9ABB86"/>
+    </marker>
+    <marker id="arr-terra" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 9 3.5, 0 7" fill="#DC9878"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="560" fill="#111009"/>
+
+  <!-- Title -->
+  <text x="550" y="42" text-anchor="middle"
+        font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="20" font-weight="bold" fill="#E8E4D8" letter-spacing="4">
+    WHAT THE AGENT TRAINS AGAINST
+  </text>
+
+  <!-- Divider down the middle -->
+  <line x1="550" y1="80" x2="550" y2="520" stroke="#3A3830" stroke-width="1"/>
+
+  <!-- ════════════════ LEFT PANEL — SELF-PLAY ════════════════ -->
+
+  <text x="275" y="100" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="14" font-weight="bold" fill="#6A6358" letter-spacing="3">
+    SELF-PLAY
+  </text>
+  <text x="275" y="120" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358">
+    agent vs snapshots of its own past
+  </text>
+
+  <!-- Training-step arrow above the timeline -->
+  <line x1="80" y1="170" x2="470" y2="170" stroke="#3A3830" stroke-width="1"
+        marker-end="url(#arr-muted-small)"/>
+  <text x="275" y="160" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358" letter-spacing="2">
+    TRAINING STEP →
+  </text>
+
+  <!-- Timeline baseline -->
+  <line x1="80" y1="245" x2="475" y2="245" stroke="#3A3830" stroke-width="1"/>
+
+  <!-- Five snapshot nodes along the timeline (centered on (95, 245) → (455, 245)) -->
+  <!-- Step labels above each node, "ghost" labels below for past snapshots, "current" for t -->
+
+  <!-- t-4 (oldest, dimmest) -->
+  <circle cx="95"  cy="245" r="14" fill="#1A1810" stroke="#6A6358" stroke-width="1.8" opacity="0.5"/>
+  <text x="95" y="230" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358" opacity="0.6">t−4</text>
+  <text x="95" y="268" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358" opacity="0.55" font-style="italic">ghost</text>
+
+  <!-- t-3 -->
+  <circle cx="185" cy="245" r="14" fill="#1A1810" stroke="#6A6358" stroke-width="1.8" opacity="0.62"/>
+  <text x="185" y="230" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358" opacity="0.7">t−3</text>
+  <text x="185" y="268" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358" opacity="0.65" font-style="italic">ghost</text>
+
+  <!-- t-2 -->
+  <circle cx="275" cy="245" r="14" fill="#1A1810" stroke="#6A6358" stroke-width="1.8" opacity="0.75"/>
+  <text x="275" y="230" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358" opacity="0.8">t−2</text>
+  <text x="275" y="268" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358" opacity="0.75" font-style="italic">ghost</text>
+
+  <!-- t-1 -->
+  <circle cx="365" cy="245" r="14" fill="#1A1810" stroke="#6A6358" stroke-width="1.8" opacity="0.88"/>
+  <text x="365" y="230" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">t−1</text>
+  <text x="365" y="268" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358" font-style="italic">ghost</text>
+
+  <!-- t (current — large, bright steel) -->
+  <circle cx="455" cy="245" r="22" fill="#1A1810" stroke="#9AAABB" stroke-width="2.5"/>
+  <text x="455" y="248" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#9AAABB" letter-spacing="1">AGENT</text>
+  <text x="455" y="222" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#9AAABB" font-weight="bold">t</text>
+  <text x="455" y="285" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#9AAABB" opacity="0.9" font-style="italic">current · training</text>
+
+  <!-- Loop arcs: from current (455, 245) sweeping DOWN and back to each prior ghost -->
+  <!-- Each ends with an arrowhead at the ghost node -->
+
+  <!-- t → t-1  (smallest loop) -->
+  <path d="M 455 267 C 455 312, 365 312, 365 267"
+        stroke="#6A6358" stroke-width="1.6" fill="none" opacity="0.75"
+        marker-end="url(#arr-muted-small)"/>
+
+  <!-- t → t-2 -->
+  <path d="M 453 269 C 453 340, 275 340, 275 267"
+        stroke="#6A6358" stroke-width="1.6" fill="none" opacity="0.7"
+        marker-end="url(#arr-muted-small)"/>
+
+  <!-- t → t-3 -->
+  <path d="M 451 270 C 451 370, 185 370, 185 268"
+        stroke="#6A6358" stroke-width="1.6" fill="none" opacity="0.65"
+        marker-end="url(#arr-muted-small)"/>
+
+  <!-- t → t-4  (largest loop) -->
+  <path d="M 449 270 C 449 400, 95 400, 95 268"
+        stroke="#6A6358" stroke-width="1.6" fill="none" opacity="0.6"
+        marker-end="url(#arr-muted-small)"/>
+
+  <!-- "ghost pool" annotation -->
+  <text x="275" y="425" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" letter-spacing="2">
+    ↑ GHOST POOL · sampled each episode
+  </text>
+  <text x="275" y="442" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#4A4840" font-style="italic">
+    frozen weights · no gradient updates
+  </text>
+
+  <!-- Caption block -->
+  <rect x="105" y="465" width="340" height="55" rx="4" fill="#1A1810" stroke="#3A3830" stroke-width="1"/>
+  <text x="275" y="485" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#E8E4D8">
+    Convergence pressure → single best response.
+  </text>
+  <text x="275" y="503" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" font-style="italic">
+    episode length collapsed: ~100 → 47 steps
+  </text>
+
+  <!-- ════════════════ RIGHT PANEL — ROUND-ROBIN ════════════════ -->
+
+  <text x="825" y="100" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="14" font-weight="bold" fill="#E8E4D8" letter-spacing="3">
+    ROUND-ROBIN
+  </text>
+  <text x="825" y="120" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358">
+    agent vs five fixed personalities
+  </text>
+
+  <!-- 5 personality nodes around center (825, 300), r=140 -->
+  <!-- Aggressive — Amber, top -->
+  <circle cx="825" cy="160" r="38" fill="#1A1810" stroke="#E8C068" stroke-width="2.5"/>
+  <text x="825" y="158" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#E8C068" letter-spacing="1">AGGRESSIVE</text>
+  <text x="825" y="174" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">+push</text>
+
+  <!-- Defensive — Steel, upper right -->
+  <circle cx="958" cy="257" r="38" fill="#1A1810" stroke="#9AAABB" stroke-width="2.5"/>
+  <text x="958" y="255" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#9AAABB" letter-spacing="1">DEFENSIVE</text>
+  <text x="958" y="271" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">+survive</text>
+
+  <!-- Evasive — Mauve, lower right -->
+  <circle cx="907" cy="413" r="38" fill="#1A1810" stroke="#B898CC" stroke-width="2.5"/>
+  <text x="907" y="411" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#B898CC" letter-spacing="1">EVASIVE</text>
+  <text x="907" y="427" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">+dodge save</text>
+
+  <!-- Balanced — Sage, lower left -->
+  <circle cx="743" cy="413" r="38" fill="#1A1810" stroke="#9ABB86" stroke-width="2.5"/>
+  <text x="743" y="411" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#9ABB86" letter-spacing="1">BALANCED</text>
+  <text x="743" y="427" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">small all</text>
+
+  <!-- Counter — Terra, upper left -->
+  <circle cx="692" cy="257" r="38" fill="#1A1810" stroke="#DC9878" stroke-width="2.5"/>
+  <text x="692" y="255" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" font-weight="bold" fill="#DC9878" letter-spacing="1">COUNTER</text>
+  <text x="692" y="271" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="9" fill="#6A6358">+punish whiff</text>
+
+  <!-- Arrows from each personality to center -->
+  <line x1="825" y1="198" x2="825" y2="262" stroke="#E8C068" stroke-width="2.2"
+        marker-end="url(#arr-amber)"/>
+  <line x1="930" y1="276" x2="867" y2="294" stroke="#9AAABB" stroke-width="2.2"
+        marker-end="url(#arr-steel)"/>
+  <line x1="881" y1="386" x2="853" y2="333" stroke="#B898CC" stroke-width="2.2"
+        marker-end="url(#arr-mauve)"/>
+  <line x1="769" y1="386" x2="797" y2="333" stroke="#9ABB86" stroke-width="2.2"
+        marker-end="url(#arr-sage)"/>
+  <line x1="720" y1="276" x2="783" y2="294" stroke="#DC9878" stroke-width="2.2"
+        marker-end="url(#arr-terra)"/>
+
+  <!-- Center agent -->
+  <circle cx="825" cy="300" r="42" fill="#1A1810" stroke="#E8E4D8" stroke-width="2.5"/>
+  <text x="825" y="298" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" font-weight="bold" fill="#E8E4D8" letter-spacing="2">AGENT</text>
+  <text x="825" y="315" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#6A6358">current</text>
+
+  <!-- Caption block -->
+  <rect x="655" y="465" width="340" height="55" rx="4" fill="#1A1810" stroke="#3A3830" stroke-width="1"/>
+  <text x="825" y="485" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#E8E4D8">
+    Diverse pressure → multi-modal policy.
+  </text>
+  <text x="825" y="503" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="11" fill="#6A6358" font-style="italic">
+    episode length recovered: 53 → 115 steps
+  </text>
+
+  <!-- Footer note -->
+  <text x="550" y="548" text-anchor="middle"
+        font-family="'Segoe UI',Arial,sans-serif"
+        font-size="10" fill="#4A4840">
+    * personality ID is also fed to the agent as an observation, so it knows which style it's playing this episode
+  </text>
+</svg>

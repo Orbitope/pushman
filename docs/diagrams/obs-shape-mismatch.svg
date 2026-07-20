@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <rect width="1100" height="560" fill="#111009"/>
+
+  <text x="550" y="42" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="20" font-weight="bold" fill="#E8E4D8" letter-spacing="4">WHY ONE NEW INPUT MEANS STARTING OVER</text>
+  <text x="550" y="64" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#6A6358">add an observation and the first layer changes shape — the trained weights no longer fit</text>
+
+  <line x1="560" y1="96" x2="560" y2="496" stroke="#3D3A30" stroke-width="1" stroke-dasharray="2,4"/>
+
+  <!-- ============ LEFT: before ============ -->
+  <g font-family="'Segoe UI',Arial,sans-serif">
+    <text x="290" y="128" text-anchor="middle" font-size="14" font-weight="bold" fill="#9AAABB" letter-spacing="2">BEFORE</text>
+    <text x="290" y="148" text-anchor="middle" font-size="11" fill="#6A6358">32 inputs → trained weights fit</text>
+
+    <!-- input column (n) -->
+    <g fill="#6B7A8D">
+      <circle cx="160" cy="210" r="7"/><circle cx="160" cy="240" r="7"/>
+      <circle cx="160" cy="270" r="7"/><circle cx="160" cy="300" r="7"/>
+      <circle cx="160" cy="330" r="7"/><circle cx="160" cy="360" r="7"/>
+    </g>
+    <text x="160" y="396" text-anchor="middle" font-size="11" fill="#9AAABB">32 inputs</text>
+
+    <!-- weight matrix block -->
+    <rect x="230" y="200" width="120" height="170" rx="4" fill="#1E1C16" stroke="#7D9A6A" stroke-width="1.4"/>
+    <text x="290" y="278" text-anchor="middle" font-size="13" font-weight="bold" fill="#7D9A6A">W</text>
+    <text x="290" y="298" text-anchor="middle" font-size="11" fill="#9A9484">32 × 256</text>
+    <text x="290" y="392" text-anchor="middle" font-size="11" fill="#7D9A6A">✓ shapes match</text>
+
+    <!-- hidden -->
+    <g fill="#3D3A30">
+      <circle cx="430" cy="220" r="6"/><circle cx="430" cy="250" r="6"/>
+      <circle cx="430" cy="280" r="6"/><circle cx="430" cy="310" r="6"/>
+      <circle cx="430" cy="340" r="6"/>
+    </g>
+    <text x="430" y="396" text-anchor="middle" font-size="11" fill="#6A6358">hidden</text>
+  </g>
+
+  <!-- ============ RIGHT: after ============ -->
+  <g font-family="'Segoe UI',Arial,sans-serif">
+    <text x="810" y="128" text-anchor="middle" font-size="14" font-weight="bold" fill="#C49A3C" letter-spacing="2">AFTER  (+ aiming obs)</text>
+    <text x="810" y="148" text-anchor="middle" font-size="11" fill="#6A6358">33 inputs → old weights are the wrong size</text>
+
+    <!-- input column (n+1) -->
+    <g fill="#6B7A8D">
+      <circle cx="680" cy="195" r="7"/><circle cx="680" cy="222" r="7"/>
+      <circle cx="680" cy="249" r="7"/><circle cx="680" cy="276" r="7"/>
+      <circle cx="680" cy="303" r="7"/><circle cx="680" cy="330" r="7"/>
+    </g>
+    <!-- the new input, highlighted -->
+    <circle cx="680" cy="357" r="8" fill="#E8C068" stroke="#111009" stroke-width="1"/>
+    <text x="700" y="361" font-size="11" fill="#E8C068">+1 new</text>
+    <text x="680" y="396" text-anchor="middle" font-size="11" fill="#9AAABB">33 inputs</text>
+
+    <!-- weight matrix block (mismatch) -->
+    <rect x="750" y="200" width="120" height="170" rx="4" fill="#1E1C16" stroke="#FF5E3A" stroke-width="1.4" stroke-dasharray="5,3"/>
+    <text x="810" y="278" text-anchor="middle" font-size="13" font-weight="bold" fill="#FF5E3A">W</text>
+    <text x="810" y="298" text-anchor="middle" font-size="11" fill="#9A9484">needs 33 × 256</text>
+    <text x="810" y="392" text-anchor="middle" font-size="11" fill="#FF5E3A">✗ can't load 32 × 256</text>
+
+    <!-- hidden -->
+    <g fill="#3D3A30">
+      <circle cx="950" cy="220" r="6"/><circle cx="950" cy="250" r="6"/>
+      <circle cx="950" cy="280" r="6"/><circle cx="950" cy="310" r="6"/>
+      <circle cx="950" cy="340" r="6"/>
+    </g>
+    <text x="950" y="396" text-anchor="middle" font-size="11" fill="#6A6358">hidden</text>
+  </g>
+
+  <!-- footer takeaway -->
+  <text x="550" y="462" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="13" font-weight="bold" fill="#EDE8DC">
+    change what the network <tspan fill="#C49A3C">sees</tspan> → fresh start.  change only what it's <tspan fill="#7D9A6A">paid</tspan> → warm-start.</text>
+  <text x="550" y="486" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#6A6358">
+    rewards live downstream of the weights; an input lives in the very first layer</text>
+</svg>

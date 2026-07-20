@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="660" viewBox="0 0 800 660" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <marker id="arr-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#E8C068"/></marker>
+    <marker id="arr-sage"  markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7D9A6A"/></marker>
+    <marker id="arr-steel" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#9AAABB"/></marker>
+  </defs>
+
+  <rect width="800" height="660" fill="#111009"/>
+
+  <text x="400" y="46" text-anchor="middle" font-size="24" font-weight="bold" fill="#EDE8DC" letter-spacing="2">COMBAT TRIANGLE</text>
+
+  <!-- arrows (drawn before nodes) -->
+  <path d="M 436 192 Q 590 280 589 458" stroke="#E8C068" stroke-width="3" fill="none" marker-end="url(#arr-amber)"/>
+  <path d="M 553 520 Q 400 612 247 520" stroke="#7D9A6A" stroke-width="3" fill="none" marker-end="url(#arr-sage)"/>
+  <path d="M 211 458 Q 210 280 364 192" stroke="#9AAABB" stroke-width="3" fill="none" marker-end="url(#arr-steel)"/>
+
+  <!-- "beats" labels at the outward bezier midpoints -->
+  <text x="582" y="292" text-anchor="middle" font-size="12" fill="#E8C068" opacity="0.75" font-style="italic">beats</text>
+  <text x="400" y="588" text-anchor="middle" font-size="12" fill="#7D9A6A" opacity="0.8" font-style="italic">beats</text>
+  <text x="218" y="292" text-anchor="middle" font-size="12" fill="#9AAABB" opacity="0.75" font-style="italic">beats</text>
+
+  <!-- nodes -->
+  <circle cx="400" cy="130" r="72" fill="#1a1812" stroke="#C49A3C" stroke-width="2.5"/>
+  <text x="400" y="126" text-anchor="middle" font-size="22" font-weight="bold" fill="#E8C068">PUSH</text>
+  <text x="400" y="150" text-anchor="middle" font-size="11" fill="#6A6358">charge &amp; release</text>
+
+  <circle cx="175" cy="520" r="72" fill="#1a1812" stroke="#6B7A8D" stroke-width="2.5"/>
+  <text x="175" y="516" text-anchor="middle" font-size="22" font-weight="bold" fill="#9AAABB">BLOCK</text>
+  <text x="175" y="540" text-anchor="middle" font-size="11" fill="#6A6358">hold to shield</text>
+
+  <circle cx="625" cy="520" r="72" fill="#1a1812" stroke="#7D9A6A" stroke-width="2.5"/>
+  <text x="625" y="516" text-anchor="middle" font-size="22" font-weight="bold" fill="#9DBE8A">DODGE</text>
+  <text x="625" y="540" text-anchor="middle" font-size="11" fill="#6A6358">dash through</text>
+
+  <!-- centre annotation -->
+  <text x="400" y="338" text-anchor="middle" font-size="13" fill="#3A3830">rock</text>
+  <text x="400" y="357" text-anchor="middle" font-size="13" fill="#3A3830">paper</text>
+  <text x="400" y="376" text-anchor="middle" font-size="13" fill="#3A3830">scissors</text>
+</svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <rect width="1100" height="560" fill="#111009"/>
+
+  <text x="550" y="42" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="20" font-weight="bold" fill="#E8E4D8" letter-spacing="4">RETUNING THE REWARDS</text>
+  <text x="550" y="64" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif"
+        font-size="12" fill="#6A6358">same signals, very different magnitudes — the second pass that finally worked</text>
+
+  <!-- headers -->
+  <g font-family="'Segoe UI',Arial,sans-serif" font-size="11" fill="#6A6358" letter-spacing="2">
+    <text x="100" y="108">SIGNAL</text>
+    <text x="560" y="108" text-anchor="end">FIRST PASS</text>
+    <text x="760" y="108" text-anchor="end">FINAL</text>
+    <text x="800" y="108">EFFECT</text>
+  </g>
+  <line x1="64" y1="118" x2="1036" y2="118" stroke="#3A3830" stroke-width="0.8"/>
+
+  <g font-family="'Segoe UI',Arial,sans-serif" font-size="14">
+    <!-- rows: y 150 step 54 -->
+    <!-- win -->
+    <text x="100" y="158" fill="#EDE8DC">win the round</text>
+    <text x="560" y="158" text-anchor="end" fill="#9A9484">1.0</text>
+    <text x="600" y="158" fill="#6A6358">→</text>
+    <text x="760" y="158" text-anchor="end" font-weight="bold" fill="#E8C068">10.0</text>
+    <text x="800" y="158" font-size="12" fill="#7D9A6A">now dwarfs every hit</text>
+    <line x1="64" y1="176" x2="1036" y2="176" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- land push -->
+    <text x="100" y="212" fill="#EDE8DC">land a push (base)</text>
+    <text x="560" y="212" text-anchor="end" fill="#9A9484">~0.20</text>
+    <text x="600" y="212" fill="#6A6358">→</text>
+    <text x="760" y="212" text-anchor="end" fill="#C8C0AE">0.05</text>
+    <text x="800" y="212" font-size="12" fill="#9A9484">shrunk to a nudge</text>
+    <line x1="64" y1="230" x2="1036" y2="230" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- edge bonus -->
+    <text x="100" y="266" fill="#EDE8DC">edge-hit bonus</text>
+    <text x="560" y="266" text-anchor="end" fill="#6A6358">none</text>
+    <text x="600" y="266" fill="#6A6358">→</text>
+    <text x="760" y="266" text-anchor="end" font-weight="bold" fill="#C8C0AE">0.50 ×</text>
+    <text x="800" y="266" font-size="12" fill="#C49A3C">NEW · rewards ring-outs</text>
+    <line x1="64" y1="284" x2="1036" y2="284" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- dodge connects -->
+    <text x="100" y="320" fill="#EDE8DC">dodge connects</text>
+    <text x="560" y="320" text-anchor="end" fill="#9A9484">~0.10</text>
+    <text x="600" y="320" fill="#6A6358">→</text>
+    <text x="760" y="320" text-anchor="end" fill="#C8C0AE">0.01</text>
+    <text x="800" y="320" font-size="12" fill="#9A9484">no longer rivals a push</text>
+    <line x1="64" y1="338" x2="1036" y2="338" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- dodge whiff -->
+    <text x="100" y="374" fill="#EDE8DC">dodge whiffed</text>
+    <text x="560" y="374" text-anchor="end" fill="#6A6358">none</text>
+    <text x="600" y="374" fill="#6A6358">→</text>
+    <text x="760" y="374" text-anchor="end" fill="#C47A5A">−0.05</text>
+    <text x="800" y="374" font-size="12" fill="#C49A3C">NEW · dodge-spam isn't free</text>
+    <line x1="64" y1="392" x2="1036" y2="392" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- facing -->
+    <text x="100" y="428" fill="#EDE8DC">face the opponent</text>
+    <text x="560" y="428" text-anchor="end" fill="#9A9484">×0.001</text>
+    <text x="600" y="428" fill="#6A6358">→</text>
+    <text x="760" y="428" text-anchor="end" fill="#C8C0AE">×0.0001</text>
+    <text x="800" y="428" font-size="12" fill="#9A9484">10× quieter — stopped beating winning</text>
+    <line x1="64" y1="446" x2="1036" y2="446" stroke="#2C2A22" stroke-width="0.6"/>
+    <!-- overdraft -->
+    <text x="100" y="482" fill="#EDE8DC">dodge on empty stamina</text>
+    <text x="560" y="482" text-anchor="end" fill="#9A9484">allowed</text>
+    <text x="600" y="482" fill="#6A6358">→</text>
+    <text x="760" y="482" text-anchor="end" fill="#C47A5A">removed</text>
+    <text x="800" y="482" font-size="12" fill="#9A9484">no more living in the red</text>
+  </g>
+
+  <text x="550" y="528" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="12"
+        font-weight="bold" fill="#7D9A6A">the win went from comparable-to-a-few-hits to ~20× any single hit</text>
+</svg>
