@@ -17,6 +17,15 @@
   <meta property="og:title" content="Pushman — How Not to Train a Bot">
   <meta property="og:description" content="An interactive RL devlog.">
   <meta property="og:type" content="article">
+  <meta property="og:url" content="https://orbitope.com/pushman/">
+  <meta property="og:image" content="https://orbitope.com/pushman/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://orbitope.com/pushman/">
+  <script type="application/ld+json">
+  {"@context": "https://schema.org", "@type": "Article", "headline": "Pushman — How Not to Train a Bot", "description": "An interactive RL devlog.", "image": "https://orbitope.com/pushman/og.png", "url": "https://orbitope.com/pushman/", "datePublished": "2026-07-01", "author": {"@type": "Person", "name": "Matthew Burke"}, "publisher": {"@type": "Organization", "name": "Orbitope"}}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -201,7 +210,11 @@
       .reveal { opacity:1; transform:none; transition:none; }
       .bar, .trap-group, .fix-group, .pip { transition:none; }
     }
-  </style>
+  
+/* Inline links to sibling Orbitope articles. Scoped to its own class because these pages do not all style a bare <a>. */
+.xref{color:var(--amber-bright,#E8C068);text-decoration:none;border-bottom:1px solid rgba(232,192,104,.38);transition:border-color .2s}
+.xref:hover{border-bottom-color:var(--amber-bright,#E8C068)}
+</style>
 </head>
 <body>
 <div class="progress" id="progress"></div>
@@ -211,7 +224,7 @@
   <header class="hero">
     <p class="kicker">Pushman · an RL devlog</p>
     <h1>How <span class="accent">not</span> to train a bot to play your game</h1>
-    <p class="sub">I wanted smart opponents for my little ring-out fighting game. I got them — and found an impressive number of wrong ways to train a reinforcement-learning agent on the way there. Here are the ones worth learning from.</p>
+    <p class="sub">I wanted smart opponents for my little ring-out fighting game. I got them — and found <a class="xref" href="https://orbitope.com/RLevator/">an impressive number of wrong ways to train a reinforcement-learning agent</a> on the way there. Here are the ones worth learning from.</p>
     <div class="clip-slot">
       <div class="ring-demo"><span class="dot m"></span><span class="dot t"></span></div>
     </div>
