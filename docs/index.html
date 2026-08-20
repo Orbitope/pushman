@@ -30,6 +30,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+  #aimSvg:focus{outline:none}
+  #aimSvg:focus-visible{outline:3px solid var(--amber-bright);outline-offset:3px;border-radius:4px}
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
@@ -39,7 +42,82 @@
       --mauve:#9A7AB0; --sage:#7D9A6A; --terra:#C47A5A; --coral:#FF5E3A;
       --text-bright:#EDE8DC; --text-primary:#C8C2B4; --text-muted:#6A6358;
       --font-display:'Rajdhani',sans-serif; --font-mono:'JetBrains Mono',monospace;
-    }
+    
+    --fig-bg:#0d0c07; --slate:#3f4a56; --border-strong:#3d3a30;
+  }
+
+  /* ── Accessibility mode ────────────────────────────────────────────────
+     Engaged by the control in the corner, or automatically under
+     `prefers-contrast: more`. Three things change, in the order they
+     actually matter to a reader:
+
+       1. the data-series tokens move to a scale separated by LIGHTNESS as
+          well as hue. The house scale separates by hue alone, so sage and
+          terra land 20.4 apart under simulated deuteranopia — the same
+          colour, for the ~5% of men who have it.
+       2. hairlines get a 2px floor and decorative opacity is dropped.
+          Presentation attributes lose to any CSS declaration, so this
+          reaches the stroke widths figure JS sets inline, without a redraw.
+       3. where a figure encodes category by colour alone, it gains a
+          second channel — shape, or a letter.
+
+     (3) is what does the real work. Colour alone cannot be made
+     colour-blind-safe at five-plus categories: any set of hues at one
+     lightness collapses for somebody. The palette only buys margin, which
+     is why these hues can stay in the house families rather than going
+     electric to chase a separation number.                              */
+  html[data-a11y]{
+    --amber:#D9B45F; --amber-bright:#F2CF79;
+    --steel:#79BCF3; --steel-bright:#A8D2F7;
+    --mauve:#B563C6; --sage:#668442; --terra:#DB8F6D; --coral:#D45F77;
+    --slate:#4F9D99;
+    --text-muted:#A39B8C;      /* house var(--text-muted) is 3.21:1 — under the floor */
+    --text-primary:#DED8CA;
+    --border:#6E6959;          /* house var(--border) is 1.29:1 */
+    --border-strong:#837D6B;
+    --stroke-floor:2px;
+    --mark-opacity:1;
+  }
+  /* A blanket stroke-width would also thin the strokes that are deliberately
+     heavy. CSS cannot take a max against a presentation attribute, so raise
+     the thin values by name. */
+  html[data-a11y] .fig svg [stroke-width="1"],
+  html[data-a11y] .fig svg [stroke-width="1.5"],
+  html[data-a11y] .fig svg [stroke-width="0.5"],
+  html[data-a11y] .fig svg [stroke-width=".5"],
+  html[data-a11y] figure svg [stroke-width="1"],
+  html[data-a11y] figure svg [stroke-width="1.5"]{stroke-width:var(--stroke-floor)}
+  /* Decorative transparency halves effective contrast: a .72-opacity mark at
+     4.47:1 lands at 2.84:1, under the 3:1 floor for a graphic. */
+  html[data-a11y] figure svg [opacity]{opacity:var(--mark-opacity)}
+
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+    clip-path:inset(50%);white-space:nowrap;border:0}
+  .kbd-hint{font-size:10px;color:var(--text-muted);letter-spacing:.04em}
+
+  /* The control that turns on legibility must not itself be the least legible
+     thing on the page. 10.7:1 resting, 44px target, first tab stop. */
+  .a11y-btn{position:fixed;top:14px;right:14px;z-index:60;display:inline-flex;align-items:center;
+    justify-content:center;gap:7px;min-height:44px;
+    font-family:var(--font-display,sans-serif);font-weight:600;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;background:rgba(26,24,18,.92);backdrop-filter:blur(6px);
+    color:var(--text-primary);border:1px solid var(--border-strong,#3d3a30);border-radius:4px;
+    padding:7px 13px;cursor:pointer;transition:.2s}
+  .a11y-btn:hover{color:var(--text-bright);border-color:var(--amber)}
+  .a11y-btn:focus-visible{outline:3px solid var(--amber-bright);outline-offset:3px}
+  .a11y-btn svg{flex:none}
+  /* State is not carried by colour. Amber-vs-bone is invisible to exactly the
+     readers this control exists for, so on/off is spelled out in the label and
+     the icon flips fill as well. */
+  .a11y-btn .state{font-weight:700}
+  .a11y-btn .state::after{content:"OFF"}
+  .a11y-btn[aria-pressed="true"]{color:var(--amber-bright);border-color:var(--amber);
+    background:rgba(196,154,60,.16);box-shadow:inset 0 0 0 1px var(--amber)}
+  .a11y-btn[aria-pressed="true"] .state::after{content:"ON"}
+  .a11y-btn[aria-pressed="true"] .half{transform:rotate(180deg);transform-origin:12px 12px}
+  @media(max-width:560px){.a11y-btn .txt{position:absolute;width:1px;height:1px;overflow:hidden;
+    clip-path:inset(50%)}.a11y-btn{min-width:44px;padding:8px 10px}}
+
 
     html { scroll-behavior: smooth; }
     body {
@@ -94,7 +172,7 @@
 
     /* ── diagram figures (reveal on scroll) ── */
     .fig { max-width: 940px; margin: 34px auto; border:1px solid var(--border); border-radius:6px;
-           overflow:hidden; background:#0d0c07; }
+           overflow:hidden; background:var(--fig-bg); }
     .fig img { display:block; width:100%; }
     .fig figcaption { font-size:11px; color:var(--text-muted); padding:11px 16px; border-top:1px solid var(--border); letter-spacing:.03em; }
     .fig.narrow { max-width: 720px; }
@@ -107,8 +185,8 @@
     .aim-head { display:flex; justify-content:space-between; align-items:center; gap:12px;
                 padding:12px 16px; border-bottom:1px solid var(--border); font-size:12px; color:var(--text-muted); letter-spacing:.04em; }
     .aim-head .v { font-weight:500; letter-spacing:.14em; padding:3px 11px; border-radius:3px; font-size:11px; }
-    .aim-head .v.land  { color:#0d0c07; background:var(--sage); }
-    .aim-head .v.whiff { color:#0d0c07; background:var(--coral); }
+    .aim-head .v.land  { color:var(--fig-bg); background:var(--sage); }
+    .aim-head .v.whiff { color:var(--fig-bg); background:var(--coral); }
     #aimSvg { display:block; width:100%; max-height:380px; touch-action:none; cursor:grab; }
     #aimSvg.drag { cursor:grabbing; }
     .aim-meter { padding:14px 18px 6px; }
@@ -152,7 +230,7 @@
     /* ── simple decision card ── */
     .decision { max-width:720px; margin:34px auto; display:flex; flex-direction:column; gap:12px; }
     .dec-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px 18px; justify-content:space-between;
-               padding:18px 22px; border:1px solid var(--border); border-radius:6px; background:#0d0c07; }
+               padding:18px 22px; border:1px solid var(--border); border-radius:6px; background:var(--fig-bg); }
     .dec-row.keep { border-left:3px solid var(--sage); }
     .dec-row.toss { border-left:3px solid var(--coral); }
     .dec-q { font-size:15px; color:var(--text-bright); } .dec-q b { color:var(--amber-bright); font-weight:600; }
@@ -217,6 +295,17 @@
 </style>
 </head>
 <body>
+<!-- orbitope:a11y-control — self-contained; move as one block. -->
+<button id="a11yBtn" class="a11y-btn" type="button" aria-pressed="false"
+        title="High-contrast, colour-blind-safe figures">
+  <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path class="half" d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/>
+  </svg>
+  <span class="txt">Contrast</span><span class="state"></span>
+</button>
+
 <div class="progress" id="progress"></div>
 <div class="wrap">
 
@@ -263,23 +352,23 @@
     <div class="graphic-col">
       <div class="graphic">
         <svg class="viz" data-step="0" viewBox="0 0 520 440" aria-label="Reward economy: trap and fix">
-          <line x1="60" y1="360" x2="470" y2="360" stroke="#2a2820" stroke-width="1"/>
+          <line x1="60" y1="360" x2="470" y2="360" stroke="var(--border)" stroke-width="1"/>
           <g class="trap-group">
-            <text x="265" y="40" text-anchor="middle" fill="#6A6358" font-size="13" letter-spacing="2">~ SAME REWARD PER HIT</text>
-            <rect class="bar dodge-bar" x="150" y="190" width="80" height="170" rx="3" fill="#9A7AB0"/>
-            <text x="190" y="384" text-anchor="middle" fill="#EDE8DC" font-size="14" font-weight="bold">DODGE</text>
-            <rect class="bar push-bar" x="290" y="178" width="80" height="182" rx="3" fill="#C49A3C"/>
-            <text x="330" y="384" text-anchor="middle" fill="#EDE8DC" font-size="14" font-weight="bold">PUSH</text>
-            <g class="effort-dodge"><circle class="pip" cx="190" cy="410" r="5" fill="#9A7AB0"/><text x="190" y="432" text-anchor="middle" fill="#6A6358" font-size="10.5">1 input</text></g>
-            <g class="effort-push"><circle class="pip" cx="306" cy="410" r="5" fill="#C49A3C"/><circle class="pip" cx="320" cy="410" r="5" fill="#C49A3C"/><circle class="pip" cx="340" cy="410" r="5" fill="#C49A3C"/><circle class="pip" cx="354" cy="410" r="5" fill="#C49A3C"/><text x="330" y="432" text-anchor="middle" fill="#6A6358" font-size="10.5">4-step commit</text></g>
-            <text class="extinct" x="330" y="250" text-anchor="middle" fill="#FF5E3A" font-size="13" font-weight="bold">extinct</text>
+            <text x="265" y="40" text-anchor="middle" fill="var(--text-muted)" font-size="13" letter-spacing="2">~ SAME REWARD PER HIT</text>
+            <rect class="bar dodge-bar" x="150" y="190" width="80" height="170" rx="3" fill="var(--mauve)"/>
+            <text x="190" y="384" text-anchor="middle" fill="var(--text-bright)" font-size="14" font-weight="bold">DODGE</text>
+            <rect class="bar push-bar" x="290" y="178" width="80" height="182" rx="3" fill="var(--amber)"/>
+            <text x="330" y="384" text-anchor="middle" fill="var(--text-bright)" font-size="14" font-weight="bold">PUSH</text>
+            <g class="effort-dodge"><circle class="pip" cx="190" cy="410" r="5" fill="var(--mauve)"/><text x="190" y="432" text-anchor="middle" fill="var(--text-muted)" font-size="10.5">1 input</text></g>
+            <g class="effort-push"><circle class="pip" cx="306" cy="410" r="5" fill="var(--amber)"/><circle class="pip" cx="320" cy="410" r="5" fill="var(--amber)"/><circle class="pip" cx="340" cy="410" r="5" fill="var(--amber)"/><circle class="pip" cx="354" cy="410" r="5" fill="var(--amber)"/><text x="330" y="432" text-anchor="middle" fill="var(--text-muted)" font-size="10.5">4-step commit</text></g>
+            <text class="extinct" x="330" y="250" text-anchor="middle" fill="var(--coral)" font-size="13" font-weight="bold">extinct</text>
           </g>
           <g class="fix-group">
-            <text x="265" y="40" text-anchor="middle" fill="#6A6358" font-size="13" letter-spacing="2">THE FIX — WIN DWARFS HITS</text>
-            <rect class="bar win-bar" x="150" y="110" width="74" height="250" rx="3" fill="#E8C068"/>
-            <text x="187" y="384" text-anchor="middle" fill="#EDE8DC" font-size="13" font-weight="bold">WIN ×10</text>
-            <rect x="262" y="326" width="56" height="34" rx="3" fill="#C47A5A"/><text x="290" y="384" text-anchor="middle" fill="#C8C2B4" font-size="12">edge hit</text>
-            <rect x="356" y="353" width="56" height="7" rx="2" fill="#6B7A8D"/><text x="384" y="384" text-anchor="middle" fill="#C8C2B4" font-size="12">center hit</text>
+            <text x="265" y="40" text-anchor="middle" fill="var(--text-muted)" font-size="13" letter-spacing="2">THE FIX — WIN DWARFS HITS</text>
+            <rect class="bar win-bar" x="150" y="110" width="74" height="250" rx="3" fill="var(--amber-bright)"/>
+            <text x="187" y="384" text-anchor="middle" fill="var(--text-bright)" font-size="13" font-weight="bold">WIN ×10</text>
+            <rect x="262" y="326" width="56" height="34" rx="3" fill="var(--terra)"/><text x="290" y="384" text-anchor="middle" fill="var(--text-primary)" font-size="12">edge hit</text>
+            <rect x="356" y="353" width="56" height="7" rx="2" fill="var(--steel)"/><text x="384" y="384" text-anchor="middle" fill="var(--text-primary)" font-size="12">center hit</text>
           </g>
         </svg>
       </div>
@@ -306,14 +395,14 @@
   <div class="fig narrow reveal aim-widget">
     <div class="aim-head"><span>Drag the opponent — is the push aimed?</span><span class="v land" id="aimV">LANDS</span></div>
     <svg id="aimSvg" viewBox="0 0 520 360" aria-label="Interactive aiming demo: drag the opponent">
-      <defs><marker id="aimArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#EDE8DC"/></marker></defs>
-      <polygon id="aimCone" points="260,290 125,98 395,98" fill="#C49A3C" fill-opacity="0.16" stroke="#C49A3C" stroke-opacity="0.6" stroke-width="1"/>
-      <text x="260" y="86" text-anchor="middle" font-size="11" fill="#6A6358" font-family="'JetBrains Mono',monospace">~70° push window</text>
-      <line id="aimVec" x1="260" y1="290" x2="320" y2="150" stroke="#7D9A6A" stroke-width="2" stroke-dasharray="4,3"/>
-      <line id="aimFacing" x1="260" y1="290" x2="260" y2="205" stroke="#EDE8DC" stroke-width="2.5" marker-end="url(#aimArrow)"/>
-      <circle cx="260" cy="290" r="15" fill="#6B7A8D"/>
-      <text x="260" y="326" text-anchor="middle" font-size="11" fill="#9AAABB" font-family="'JetBrains Mono',monospace">SELF</text>
-      <circle id="aimOpp" cx="320" cy="150" r="13" fill="#C47A5A" stroke="#EDE8DC" stroke-width="1.5"/>
+      <defs><marker id="aimArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--text-bright)"/></marker></defs>
+      <polygon id="aimCone" points="260,290 125,98 395,98" fill="var(--amber)" fill-opacity="0.16" stroke="var(--amber)" stroke-opacity="0.6" stroke-width="1"/>
+      <text x="260" y="86" text-anchor="middle" font-size="11" fill="var(--text-muted)" font-family="'JetBrains Mono',monospace">~70° push window</text>
+      <line id="aimVec" x1="260" y1="290" x2="320" y2="150" stroke="var(--sage)" stroke-width="2" stroke-dasharray="4,3"/>
+      <line id="aimFacing" x1="260" y1="290" x2="260" y2="205" stroke="var(--text-bright)" stroke-width="2.5" marker-end="url(#aimArrow)"/>
+      <circle cx="260" cy="290" r="15" fill="var(--steel)"/>
+      <text x="260" y="326" text-anchor="middle" font-size="11" fill="var(--steel-bright)" font-family="'JetBrains Mono',monospace">SELF</text>
+      <circle id="aimOpp" cx="320" cy="150" r="13" fill="var(--terra)" stroke="var(--text-bright)" stroke-width="1.5"/>
     </svg>
     <div class="aim-meter">
       <div class="aim-bar"><span class="thr" style="left:91%"></span><span class="fill" id="aimFill"></span></div>
@@ -377,21 +466,21 @@
       <span style="font-size:11px">Lag <b id="diffLag">6</b>&thinsp;fr &nbsp;·&nbsp; Noise ±<b id="diffNoise">9</b>&thinsp;px</span>
     </div>
     <svg id="diffSvg" class="diff-svg" viewBox="0 0 520 290" aria-label="True opponent position vs ghost position the bot observes">
-      <circle cx="248" cy="145" r="90" fill="none" stroke="#2a2820" stroke-width="1.5" stroke-dasharray="8,6"/>
-      <circle cx="248" cy="145" r="3" fill="#2a2820"/>
-      <circle cx="64" cy="145" r="13" fill="#1a1812" stroke="#6B7A8D" stroke-width="2"/>
-      <text x="64" y="149" text-anchor="middle" font-size="10" fill="#9AAABB" font-family="'JetBrains Mono',monospace" font-weight="500">BOT</text>
-      <circle cx="368" cy="36" r="7" fill="#C47A5A"/>
-      <text x="382" y="41" fill="#9AAABB" font-size="11" font-family="'JetBrains Mono',monospace">true position</text>
-      <circle cx="368" cy="58" r="7" fill="#9A7AB0" opacity="0.45"/>
-      <text x="382" y="63" fill="#9AAABB" font-size="11" font-family="'JetBrains Mono',monospace">ghost (what bot sees)</text>
-      <line id="diffConn" x1="248" y1="55" x2="248" y2="55" stroke="#9A7AB0" stroke-width="1.5" stroke-dasharray="5,4" stroke-opacity="0"/>
-      <circle id="diffGhost" cx="248" cy="55" r="12" fill="#9A7AB0" opacity="0.35"/>
-      <circle id="diffTrue" cx="248" cy="55" r="12" fill="#C47A5A" stroke="#EDE8DC" stroke-width="1.5"/>
+      <circle cx="248" cy="145" r="90" fill="none" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="8,6"/>
+      <circle cx="248" cy="145" r="3" fill="var(--border)"/>
+      <circle cx="64" cy="145" r="13" fill="var(--surface)" stroke="var(--steel)" stroke-width="2"/>
+      <text x="64" y="149" text-anchor="middle" font-size="10" fill="var(--steel-bright)" font-family="'JetBrains Mono',monospace" font-weight="500">BOT</text>
+      <circle cx="368" cy="36" r="7" fill="var(--terra)"/>
+      <text x="382" y="41" fill="var(--steel-bright)" font-size="11" font-family="'JetBrains Mono',monospace">true position</text>
+      <circle cx="368" cy="58" r="7" fill="var(--mauve)" opacity="0.45"/>
+      <text x="382" y="63" fill="var(--steel-bright)" font-size="11" font-family="'JetBrains Mono',monospace">ghost (what bot sees)</text>
+      <line id="diffConn" x1="248" y1="55" x2="248" y2="55" stroke="var(--mauve)" stroke-width="1.5" stroke-dasharray="5,4" stroke-opacity="0"/>
+      <circle id="diffGhost" cx="248" cy="55" r="12" fill="var(--mauve)" opacity="0.35"/>
+      <circle id="diffTrue" cx="248" cy="55" r="12" fill="var(--terra)" stroke="var(--text-bright)" stroke-width="1.5"/>
     </svg>
     <div class="diff-sr">
       <span class="diff-end">EASY</span>
-      <input type="range" id="diffSlider" min="0" max="100" value="50" style="flex:1;accent-color:var(--amber)">
+      <input type="range" id="diffSlider" min="0" max="100" value="50" style="flex:1;accent-color:var(--amber)" aria-label="Bot difficulty, easy to expert">
       <span class="diff-end">EXPERT</span>
     </div>
     <figcaption>Difficulty is a single scalar — easier bots observe a stale, noisy ghost of your position rather than where you actually are.</figcaption>
@@ -430,6 +519,27 @@
   </section>
 
 </div>
+
+<!-- orbitope:a11y-control script — pairs with the button above. -->
+<script>
+(function(){
+  var KEY='orbitope-a11y', root=document.documentElement, btn=document.getElementById('a11yBtn');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function apply(on,persist){
+    if(on) root.setAttribute('data-a11y',''); else root.removeAttribute('data-a11y');
+    if(btn) btn.setAttribute('aria-pressed',on?'true':'false');
+    if(persist){ try{ localStorage.setItem(KEY,on?'on':'off'); }catch(e){} }
+    document.dispatchEvent(new CustomEvent('a11ychange',{detail:{on:on}}));
+  }
+  // No media query reports colour blindness, so prefers-contrast is only a
+  // hint. An explicit choice always wins, and it is shared across the site
+  // because every article sits on the one origin.
+  var pref=stored();
+  var auto=window.matchMedia&&window.matchMedia('(prefers-contrast: more)').matches;
+  apply(pref?pref==='on':!!auto,false);
+  if(btn) btn.addEventListener('click',function(){ apply(!root.hasAttribute('data-a11y'),true); });
+})();
+</script>
 
 <script>
   // scroll progress bar
@@ -495,7 +605,7 @@
       wordEl.textContent = land ? 'aimed ✓' : 'off-target ✗';
       vEl.textContent = land ? 'LANDS' : 'WHIFFS';
       vEl.className = 'v ' + (land ? 'land' : 'whiff');
-      vec.setAttribute('stroke', land ? '#7D9A6A' : '#FF5E3A');
+      vec.setAttribute('stroke', land ? 'var(--sage)' : 'var(--coral)');
       cone.setAttribute('fill-opacity', land ? 0.18 : 0.06);
       cone.setAttribute('stroke-opacity', land ? 0.65 : 0.3);
       fill.style.width = ((dot + 1) / 2 * 100) + '%';
@@ -507,25 +617,65 @@
     svg.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-    setOpp({ x: 320, y: 150 });
+
+    /* Keyboard. Only the angle decides the outcome — distance is clamped to
+       the ring and drops out of the dot product — so this is a one-axis
+       control, and role="slider" over the angle is the honest description of
+       it rather than a made-up 2-D affordance. */
+    var angle = 0;                      // degrees off the facing direction
+    function setAngle(deg) {
+      angle = Math.max(-180, Math.min(180, deg));
+      var r = 150, t = angle * Math.PI / 180;
+      setOpp({ x: SELF.x + Math.sin(t) * r, y: SELF.y - Math.cos(t) * r });
+      svg.setAttribute('aria-valuenow', Math.round(angle));
+      svg.setAttribute('aria-valuetext',
+        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        (Math.cos(t) >= THR ? 'attack lands' : 'attack whiffs'));
+    }
+    svg.setAttribute('tabindex', '0');
+    svg.setAttribute('role', 'slider');
+    svg.setAttribute('aria-label', 'Angle to the opponent. The attack only lands inside a 35 degree cone.');
+    svg.setAttribute('aria-valuemin', '-180');
+    svg.setAttribute('aria-valuemax', '180');
+    svg.addEventListener('keydown', function (e) {
+      var step = e.shiftKey ? 1 : 5, k = e.key;
+      if (k === 'ArrowRight' || k === 'ArrowUp') setAngle(angle + step);
+      else if (k === 'ArrowLeft' || k === 'ArrowDown') setAngle(angle - step);
+      else if (k === 'Home') setAngle(0);
+      else if (k === 'End') setAngle(180);
+      else return;
+      e.preventDefault();
+    });
+    // keep the announced value honest when the pointer is what moved it
+    var rawSetOpp = setOpp;
+    setOpp = function (p) {
+      rawSetOpp(p);
+      var dx = p.x - SELF.x, dy = p.y - SELF.y;
+      angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+      svg.setAttribute('aria-valuenow', Math.round(angle));
+      svg.setAttribute('aria-valuetext',
+        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        (Math.cos(angle * Math.PI / 180) >= THR ? 'attack lands' : 'attack whiffs'));
+    };
+    setAngle(24);
   })();
 
   // ── personality explorer ──
   (function () {
     var PERS = [
-      { name:'AGGRESSIVE', abbr:'AGRS', color:'#C47A5A',
+      { name:'AGGRESSIVE', abbr:'AGRS', color:'var(--terra)',
         desc:'Charges constantly — highest push reward bias. Rarely backs off or shields. Predictable, but punishing if you miss.',
         bars:[0.88, 0.20, 0.15, 0.30, 0.65] },
-      { name:'DEFENSIVE',  abbr:'DEFN', color:'#7D9A6A',
+      { name:'DEFENSIVE',  abbr:'DEFN', color:'var(--sage)',
         desc:'Waits behind a shield — high block and survival bias. Forces you to overextend, then counters once your stamina drops.',
         bars:[0.25, 0.30, 0.85, 0.85, 0.55] },
-      { name:'EVASIVE',    abbr:'EVST', color:'#9A7AB0',
+      { name:'EVASIVE',    abbr:'EVST', color:'var(--mauve)',
         desc:'Never where you expect — extreme dodge bias. Stays mobile, forces you to commit to a miss, then re-engages.',
         bars:[0.15, 0.88, 0.28, 0.60, 0.50] },
-      { name:'BALANCED',   abbr:'BLNC', color:'#9AAABB',
+      { name:'BALANCED',   abbr:'BLNC', color:'var(--steel-bright)',
         desc:'No exploitable lean — reward bias spread evenly across all actions. The closest thing to an optimal generalist.',
         bars:[0.55, 0.52, 0.55, 0.55, 0.65] },
-      { name:'COUNTER',    abbr:'CNTR', color:'#E8C068',
+      { name:'COUNTER',    abbr:'CNTR', color:'var(--amber-bright)',
         desc:'Optimizes for the win above all else — highest win reward, patient, punishes hard once it spots an opening.',
         bars:[0.52, 0.48, 0.55, 0.45, 0.88] }
     ];
