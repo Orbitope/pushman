@@ -299,7 +299,7 @@
 <body>
 <!-- orbitope:a11y-control — self-contained; move as one block. -->
 <button id="a11yBtn" class="a11y-btn" type="button" aria-pressed="false"
-        title="High-contrast, colour-blind-safe figures">
+        title="High-contrast, color-blind-safe figures">
   <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
        stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <circle cx="12" cy="12" r="9"/>
@@ -630,7 +630,7 @@
       setOpp({ x: SELF.x + Math.sin(t) * r, y: SELF.y - Math.cos(t) * r });
       svg.setAttribute('aria-valuenow', Math.round(angle));
       svg.setAttribute('aria-valuetext',
-        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        Math.abs(Math.round(angle)) + '\u00B0 off center, ' +
         (Math.cos(t) >= THR ? 'attack lands' : 'attack whiffs'));
     }
     svg.setAttribute('tabindex', '0');
@@ -655,7 +655,7 @@
       angle = Math.atan2(dx, -dy) * 180 / Math.PI;
       svg.setAttribute('aria-valuenow', Math.round(angle));
       svg.setAttribute('aria-valuetext',
-        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        Math.abs(Math.round(angle)) + '\u00B0 off center, ' +
         (Math.cos(angle * Math.PI / 180) >= THR ? 'attack lands' : 'attack whiffs'));
     };
     setAngle(24);
