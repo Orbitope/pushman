@@ -299,7 +299,7 @@
 <body>
 <!-- orbitope:a11y-control — self-contained; move as one block. -->
 <button id="a11yBtn" class="a11y-btn" type="button" aria-pressed="false"
-        title="High-contrast, colour-blind-safe figures">
+        title="High-contrast, color-blind-safe figures">
   <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
        stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <circle cx="12" cy="12" r="9"/>
@@ -315,7 +315,7 @@
   <header class="hero">
     <p class="kicker">Pushman · an RL devlog</p>
     <h1>How <span class="accent">not</span> to train a bot to play your game</h1>
-    <p class="sub">I wanted smart opponents for my little ring-out fighting game. I got them — and found <a class="xref" href="https://orbitope.com/RLevator/">an impressive number of wrong ways to train a reinforcement-learning agent</a> on the way there. Here are the ones worth learning from.</p>
+    <p class="sub">I wanted smart opponents for my little ring-out fighting game. I got them, and found <a class="xref" href="https://orbitope.com/RLevator/">an impressive number of wrong ways to train a reinforcement-learning agent</a> on the way there. Here are the ones worth learning from.</p>
     <div class="clip-slot">
       <div class="ring-demo"><span class="dot m"></span><span class="dot t"></span></div>
     </div>
@@ -326,10 +326,10 @@
   <section class="beat">
     <p class="eyebrow">01 · the game in 60 seconds</p>
     <h2>Three moves on a triangle, six states underneath.</h2>
-    <p>Pushman is a two-player ring-out fight. <span class="amber">Push</span> beats <span class="mauve">dodge</span>, dodge beats <span class="sage">block</span>, block beats push — rock-paper-scissors with a stamina meter on top. Six states under the hood, and you <span class="dim">commit</span> when you act: no moving while you charge a push, no pushing while you block. The whole game is reading which one your opponent is about to commit to. That's what I wanted the bots to learn.</p>
+    <p>Pushman is a two-player ring-out fight. <span class="amber">Push</span> beats <span class="mauve">dodge</span>, dodge beats <span class="sage">block</span>, block beats push, rock-paper-scissors with a stamina meter on top. Six states under the hood, and you <span class="dim">commit</span> when you act: no moving while you charge a push, no pushing while you block. The whole game is reading which one your opponent is about to commit to. That's what I wanted the bots to learn.</p>
   </section>
-  <figure class="fig reveal"><img src="diagrams/combat-triangle.svg" alt="Combat triangle"><figcaption>The combat triangle — each move beats one and loses to another.</figcaption></figure>
-  <figure class="fig reveal"><img src="diagrams/state-machine.svg" alt="Player state machine"><figcaption>Six states. You commit on entry — that's what makes the reads matter.</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/combat-triangle.svg" alt="Combat triangle"><figcaption>The combat triangle. Each move beats one and loses to another.</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/state-machine.svg" alt="Player state machine"><figcaption>Six states. You commit on entry, which is what makes the reads matter.</figcaption></figure>
 
   <div class="rule"></div>
 
@@ -337,18 +337,18 @@
   <section class="beat">
     <p class="eyebrow">02 · the first pass</p>
     <h2>I gave it the basics and pressed go.</h2>
-    <p>The agent sees where it is, where the opponent is, both stamina meters, who's in which state. It can move, turn, and pick one of three actions. For rewards I did the obvious thing — a little for landing hits, a little for surviving, a little for facing the opponent, and a real prize for winning. PPO, nothing exotic. It trained. It played badly. Which, for a first pass, is exactly what you'd expect — the interesting part is <span class="dim">how</span> it was bad.</p>
+    <p>The agent sees where it is, where the opponent is, both stamina meters, who's in which state. It can move, turn, and pick one of three actions. For rewards I did the obvious thing: a little for landing hits, a little for surviving, a little for facing the opponent, and a real prize for winning. I used PPO, nothing exotic. It trained, and it played badly, which for a first pass is exactly what you'd expect. The interesting part is <span class="dim">how</span> it was bad.</p>
   </section>
-  <figure class="fig reveal"><img src="diagrams/observation-table.svg" alt="Observation table"><figcaption>What the agent sees, grouped. The last row is the one I forgot — more on that later.</figcaption></figure>
-  <figure class="fig reveal"><img src="diagrams/reward-table.svg" alt="Reward table"><figcaption>What it's paid for. The final version — getting here took a few wrong turns.</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/observation-table.svg" alt="Observation table"><figcaption>What the agent sees, grouped. The last row is the one I forgot (more on that later).</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/reward-table.svg" alt="Reward table"><figcaption>What it's paid for. This is the final version, and getting here took a few wrong turns.</figcaption></figure>
 
   <div class="rule"></div>
 
   <!-- ───── 3 · THE REWARD ECONOMY (animated scrolly) ───── -->
   <section class="beat">
     <p class="eyebrow">03 · mistake — the reward economy</p>
-    <h2>The agent learned to dodge, and quietly forgot how to do anything else.</h2>
-    <p>The rewards were sane and yet the bots only ever <span class="mauve">dodged</span>. Two-thirds of my rock-paper-scissors went extinct, and the training curve looked fine the entire time. Here's why. <span class="dim">(scroll the panel)</span></p>
+    <h2>The agent learned to dodge, and forgot how to do anything else.</h2>
+    <p>The rewards were sane and yet the bots only ever <span class="mauve">dodged</span>. Two-thirds of my rock-paper-scissors went extinct, and the training curve looked fine the entire time. <span class="dim">(scroll the panel)</span></p>
   </section>
   <section class="scrolly">
     <div class="graphic-col">
@@ -376,14 +376,14 @@
       </div>
     </div>
     <div class="steps-col">
-      <div class="step" data-step="0"><p class="n">01</p><h3>Two moves, one price.</h3><p>A <span class="mauve">dodge</span> and a <span class="amber">push</span> paid about the same reward. On paper, a fair fight.</p></div>
-      <div class="step" data-step="1"><p class="n">02</p><h3>But one is a button. The other is a plan.</h3><p>A dodge is <span class="mauve">one input</span>. A push is a four-step commitment — charge, hold, release, still be standing there when it lands. Same reward, a fraction of the effort.</p></div>
-      <div class="step" data-step="2"><p class="n">03</p><h3>So it stopped pushing.</h3><p>Why earn the same payout the hard way? The <span class="coral">push</span> withered out of the policy — and block only counters a push, so block died with it.</p></div>
-      <div class="step" data-step="3"><p class="n">04</p><h3>Two-thirds of the triangle, gone.</h3><p>Rock-paper-scissors collapsed to just rock. And the reward curve never flinched — it looked healthy the whole time.</p></div>
-      <div class="step" data-step="4"><p class="n">05</p><h3>The fix wasn't a bigger number.</h3><p>It was making the <span class="amber">win</span> dwarf any run of hits, and paying the most for hits that shove someone toward the <span class="sage">edge</span> — where ring-outs actually happen.</p></div>
+      <div class="step" data-step="0"><p class="n">01</p><h3>Two moves paid the same.</h3><p>A <span class="mauve">dodge</span> and a <span class="amber">push</span> paid about the same reward. On paper, that's a fair fight.</p></div>
+      <div class="step" data-step="1"><p class="n">02</p><h3>One move is far more work than the other.</h3><p>A dodge is <span class="mauve">one input</span>. A push is a four-step commitment: charge, hold, release, and still be standing there when it lands.</p></div>
+      <div class="step" data-step="2"><p class="n">03</p><h3>So it stopped pushing.</h3><p>Earning the same payout the hard way made no sense, so the <span class="coral">push</span> dropped out of the policy. Block only counters a push, so block disappeared with it.</p></div>
+      <div class="step" data-step="3"><p class="n">04</p><h3>Two-thirds of the triangle disappeared.</h3><p>Rock-paper-scissors collapsed to just rock. The reward curve looked healthy the whole time.</p></div>
+      <div class="step" data-step="4"><p class="n">05</p><h3>The fix was in the ratios.</h3><p>It was making the <span class="amber">win</span> dwarf any run of hits, and paying the most for hits that shove someone toward the <span class="sage">edge</span>, where ring-outs happen.</p></div>
     </div>
   </section>
-  <figure class="fig reveal"><img src="diagrams/reward-values-old-vs-new.svg" alt="Reward values, before and after"><figcaption>Every signal, retuned — and the dodge-on-empty-stamina exploit removed.</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/reward-values-old-vs-new.svg" alt="Reward values, before and after"><figcaption>Every signal retuned, and the dodge-on-empty-stamina exploit removed.</figcaption></figure>
 
   <div class="rule"></div>
 
@@ -391,11 +391,11 @@
   <section class="beat">
     <p class="eyebrow">04 · mistake — the missing observation</p>
     <h2>Even with sane rewards, the bots couldn't aim.</h2>
-    <p>They dodged fine, but their pushes and blocks pointed at nothing. The agent knew <span class="dim">where</span> the opponent was, and it knew its own heading — but I never gave it the one number that matters for aiming: <span class="amber">am I actually pointed at them?</span> A push only lands in a narrow cone in front of you, and I was asking a handful of neurons to derive that alignment from raw angles — to learn trigonometry from scratch. It couldn't. The fix was almost insulting: compute the dot product myself and hand it over.</p>
-    <p class="dim">The irony: I'd been paying the bot to face the enemy long before I gave it any way to know whether it was.</p>
+    <p>They dodged fine, but their pushes and blocks pointed at nothing. The agent knew <span class="dim">where</span> the opponent was, and it knew its own heading, but I never gave it the one number that matters for aiming: <span class="amber">whether it was pointed at them.</span> A push only lands in a narrow cone in front of you, and I was asking a handful of neurons to derive that alignment from raw angles, to learn trigonometry from scratch, which it couldn't. I fixed it by computing the dot product myself and handing it over.</p>
+    <p class="dim">I'd been paying the bot to face the enemy long before I gave it any way to know whether it was.</p>
   </section>
   <div class="fig narrow reveal aim-widget">
-    <div class="aim-head"><span>Drag the opponent — is the push aimed?</span><span class="v land" id="aimV">LANDS</span></div>
+    <div class="aim-head"><span>Drag the opponent. Is the push aimed?</span><span class="v land" id="aimV">LANDS</span></div>
     <svg id="aimSvg" viewBox="0 0 520 360" aria-label="Interactive aiming demo: drag the opponent">
       <defs><marker id="aimArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--text-bright)"/></marker></defs>
       <polygon id="aimCone" points="260,290 125,98 395,98" fill="var(--amber)" fill-opacity="0.16" stroke="var(--amber)" stroke-opacity="0.6" stroke-width="1"/>
@@ -410,7 +410,7 @@
       <div class="aim-bar"><span class="thr" style="left:91%"></span><span class="fill" id="aimFill"></span></div>
       <div class="lab"><span>facing · directionToOpponent</span><span class="val"><span id="aimDot">0.92</span> · <span id="aimWord">aimed ✓</span></span></div>
     </div>
-    <figcaption>The whole aim problem in one number — <code>Vector2.Dot(transform.up, dirToOpp)</code>. Precompute it instead of making the network learn the trig.</figcaption>
+    <figcaption>The whole aim problem in one number: <code>Vector2.Dot(transform.up, dirToOpp)</code>. Precompute it instead of making the network learn the trig.</figcaption>
   </div>
   <div class="rule"></div>
 
@@ -418,11 +418,11 @@
   <section class="beat">
     <p class="eyebrow">05 · the catch</p>
     <h2>Fixing an observation meant starting over.</h2>
-    <p>The moment you add an input, the network's first layer changes shape — and every weight you'd trained is now the wrong size. You can't carry it forward. So adding that one aiming number meant throwing the model out and starting fresh, with rebalanced rewards and retuned stamina all at once. Fine when you plan for it. Miserable when you find out by surprise.</p>
+    <p>The moment you add an input, the network's first layer changes shape, and every weight you'd trained is now the wrong size. You can't carry it forward. So adding that one aiming number meant throwing the model out and starting fresh, with rebalanced rewards and retuned stamina all at once. That's fine when you plan for it, and miserable when you find out by surprise.</p>
   </section>
   <div class="decision reveal">
-    <div class="dec-row keep"><span class="dec-q">Changed a <b>reward</b>?</span><span class="dec-a">♻ warm-start — keep the weights you trained</span></div>
-    <div class="dec-row toss"><span class="dec-q">Changed an <b>observation</b>?</span><span class="dec-a">✗ start over — the first layer is now the wrong shape</span></div>
+    <div class="dec-row keep"><span class="dec-q">Changed a <b>reward</b>?</span><span class="dec-a">♻ warm-start, keep the weights you trained</span></div>
+    <div class="dec-row toss"><span class="dec-q">Changed an <b>observation</b>?</span><span class="dec-a">✗ start over, the first layer is now the wrong shape</span></div>
   </div>
 
   <div class="rule"></div>
@@ -431,17 +431,17 @@
   <section class="beat">
     <p class="eyebrow win">06 · what worked — failing forward</p>
     <h2>You don't always have to start from scratch.</h2>
-    <p>As long as you <span class="dim">don't</span> change what the network sees, and keep the rewards on the same scale, you can keep refining: re-weight the rewards, warm-start from the weights you already have, bump the learning rate so the policy explores again, and let it go. You're starting from a local optimum, not a blank page. The boring discipline that buys you this — pick a representative set of observations and rewards <span class="sage">early</span>, and most of your iteration becomes tuning instead of rebuilding.</p>
+    <p>As long as you <span class="dim">don't</span> change what the network sees, and keep the rewards on the same scale, you can keep refining: re-weight the rewards, warm-start from the weights you already have, bump the learning rate so the policy explores again, and let it go. You're starting from a local optimum instead of a blank page. The boring discipline that gets you this: pick a representative set of observations and rewards <span class="sage">early</span>, so most of your iteration becomes tuning instead of rebuilding.</p>
   </section>
-  <figure class="fig reveal"><img src="diagrams/warm-start-local-optimum.svg" alt="Warm-start from a local optimum"><figcaption>Keep the weights, raise the learning rate, climb out of the local optimum.</figcaption></figure>
+  <figure class="fig reveal"><img src="diagrams/warm-start-local-optimum.svg" alt="Warm-start from a local optimum"><figcaption>Keep the weights, raise the learning rate, and climb out of the local optimum.</figcaption></figure>
 
   <div class="rule"></div>
 
   <!-- ───── 7 · PERSONALITIES & DIFFICULTY ───── -->
   <section class="beat">
     <p class="eyebrow win">07 · what worked — variety</p>
-    <h2>One network, five opponents — and self-play was the wrong call.</h2>
-    <p>I wanted several bots worth fighting, not one optimal one. The textbook move is self-play — fight past copies of yourself — but it collapses: the agent finds one opening that beats the ghost pool and the fights stop being fights. So instead I trained <span class="amber">one</span> network against five hand-defined personalities, each just a small reward bias with its identity fed in as a one-hot input. Facing five pressures every episode, no single strategy beats all of them, so the network stays flexible. Slower at first, but robust — and because personality is just an input, I can pick which bot you face, and how hard it reacts, after training.</p>
+    <h2>One network, five opponents.</h2>
+    <p>I wanted several bots worth fighting, instead of one optimal one. The textbook move is self-play (fight past copies of yourself), but it collapses. The agent finds one opening that beats the ghost pool, and the matches stop being competitive. So instead I trained <span class="amber">one</span> network against five hand-defined personalities, each a small reward bias with its identity fed in as a one-hot input. Facing five pressures every episode, no single strategy beats all of them, so the network stays flexible. It's slower at first, but it holds up. Because personality is an input, I can pick which bot you face, and how hard it reacts, after training.</p>
   </section>
   <figure class="fig reveal"><img src="diagrams/self-play-vs-round-robin.svg" alt="Self-play vs round-robin"><figcaption>Self-play converges to one best response; round-robin forces a multi-modal policy.</figcaption></figure>
   <!-- personality explorer widget -->
@@ -451,14 +451,14 @@
       <div>
         <p class="pers-desc-txt" id="persDesc"></p>
         <div class="pers-oh" id="persOH"></div>
-        <p class="pers-oh-note">↑ personality fed as one-hot network input — swap the active row, swap the bot. No retraining.</p>
+        <p class="pers-oh-note">↑ personality fed as a one-hot network input. Swap the active row to swap the bot, with no retraining.</p>
       </div>
       <div>
         <p class="pers-bar-hdr">reward emphasis</p>
         <div id="persBarsEl"></div>
       </div>
     </div>
-    <figcaption>Five personalities, one network. Each is a reward bias and a one-hot identity input — pick which bot the player faces at runtime, no retraining.</figcaption>
+    <figcaption>Five personalities, one network. Each is a reward bias and a one-hot identity input. Pick which bot the player faces at runtime, with no retraining.</figcaption>
   </div>
 
   <!-- difficulty / humanization slider widget -->
@@ -485,7 +485,7 @@
       <input type="range" id="diffSlider" min="0" max="100" value="50" style="flex:1;accent-color:var(--amber)" aria-label="Bot difficulty, easy to expert">
       <span class="diff-end">EXPERT</span>
     </div>
-    <figcaption>Difficulty is a single scalar — easier bots observe a stale, noisy ghost of your position rather than where you actually are.</figcaption>
+    <figcaption>Difficulty is a single scalar. Easier bots observe a stale, noisy ghost of your position rather than where you are.</figcaption>
   </div>
 
   <div class="rule"></div>
@@ -494,7 +494,7 @@
   <section class="beat">
     <p class="eyebrow win">08 · proof</p>
     <h2>And then they got smart.</h2>
-    <p>The bots learned to bait a block, wait out the opponent's stamina, and punish the drop. That's the policy <span class="amber">reading</span> its opponent — the exact thing I set out to build.</p>
+    <p>The bots learned to bait a block, wait out the opponent's stamina, and punish the drop. That's the policy <span class="amber">reading</span> its opponent, which is exactly what I set out to build.</p>
   </section>
 
   <div class="rule"></div>
@@ -502,9 +502,9 @@
   <!-- ───── 9 · GOOD BOT, NOT FUN ───── -->
   <section class="beat">
     <p class="eyebrow">09 · the last mistake</p>
-    <h2>Good bot. Not a fun game.</h2>
-    <p>I won — a varied, sharp set of bots that read you and punished you, at whatever difficulty I picked. Then I sat down to actually play my own game, as a human, and it wasn't fun. Not because of the bots — because of the <span class="terra">stamina economy</span> the whole thing was built on. The bots were a perfect solution to a game I hadn't finished designing.</p>
-    <p>Which ties the rest together: I optimized hard for a reward I never checked was the right one. <span class="amber">I misspecified my own objective.</span> It took the bots three million steps to stop ringing themselves out. Hopefully it doesn't take me that many to remember to play the thing before I train against it.</p>
+    <h2>A good bot, but not a fun game.</h2>
+    <p>I won, with a varied, sharp set of bots that read you and punished you at whatever difficulty I picked. Then I sat down to play my own game, as a human, and it wasn't fun. The <span class="terra">stamina economy</span> the whole thing was built on was the problem. The bots were a perfect solution to a game I hadn't finished designing.</p>
+    <p>I optimized hard for a reward I never checked was the right one. <span class="amber">I misspecified my own objective.</span> It took the bots three million steps to stop ringing themselves out. Hopefully it doesn't take me that many to remember to play the thing before I train against it.</p>
   </section>
 
   <div class="rule"></div>
@@ -512,8 +512,8 @@
   <!-- ───── OUTRO ───── -->
   <section class="outro">
     <p class="eyebrow" style="color:var(--amber)">if you're starting your own</p>
-    <h2>Build something fun to play against first — then trust your hands.</h2>
-    <p>The cheapest, highest-leverage thing isn't a reward function. It's one honest opponent worth losing to, rough numbers for stamina and force and distance, and an hour of actually playing it before you train anything. The network will optimize whatever you hand it, perfectly — including your mistakes.</p>
+    <h2>Build something fun to play against first.</h2>
+    <p>The cheapest, highest-payoff thing is one honest opponent worth losing to, rough numbers for stamina and force and distance, and an hour of playing it before you train anything. The network will perfectly optimize whatever you hand it, including your mistakes.</p>
     <nav class="links">
       <a class="link-btn" href="https://github.com/mwburke/Pushman" target="_blank" rel="noopener">GitHub</a>
       <a class="link-btn" href="https://orbitope.github.io" target="_blank" rel="noopener">orbitope.github.io</a>
@@ -630,7 +630,7 @@
       setOpp({ x: SELF.x + Math.sin(t) * r, y: SELF.y - Math.cos(t) * r });
       svg.setAttribute('aria-valuenow', Math.round(angle));
       svg.setAttribute('aria-valuetext',
-        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        Math.abs(Math.round(angle)) + '\u00B0 off center, ' +
         (Math.cos(t) >= THR ? 'attack lands' : 'attack whiffs'));
     }
     svg.setAttribute('tabindex', '0');
@@ -655,7 +655,7 @@
       angle = Math.atan2(dx, -dy) * 180 / Math.PI;
       svg.setAttribute('aria-valuenow', Math.round(angle));
       svg.setAttribute('aria-valuetext',
-        Math.abs(Math.round(angle)) + '\u00B0 off centre, ' +
+        Math.abs(Math.round(angle)) + '\u00B0 off center, ' +
         (Math.cos(angle * Math.PI / 180) >= THR ? 'attack lands' : 'attack whiffs'));
     };
     setAngle(24);
